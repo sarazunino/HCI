@@ -1,0 +1,11 @@
+name: hci_project
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pandas
+  - matplotlib
+  - seaborn
+  - plotly
+  - geopandas
+  - jupyter
