@@ -1,26 +1,24 @@
 import pandas as pd
 
-# FUNZIONI UTILI
+# --- FUNZIONI DI DIAGNOSI ---
 
-# mostra la dimensione del dataframe (riga, colonna)
+# Mostra le dimensioni (righe, colonne) del DataFrame
 def show_shape(df, name="DataFrame"):
     print(f"{name}: {df.shape[0]} rows, {df.shape[1]} columns")
 
 
-# mostra il numero di duplicati
+# Analizza e stampa la presenza di record duplicati
 def check_duplicates(df, name="DataFrame"):
     num_duplicates = df.duplicated().sum()
-    total_duplicated_rows = df.duplicated(keep=False).sum()
-    unique_records_with_dupes = total_duplicated_rows - num_duplicates
-    print(f"In '{name}': {unique_records_with_dupes} original records produced {num_duplicates} extra copies.")
-    
-
-# rimuove i duplicati
-def clean_duplicates(df):
-    return df.drop_duplicates().reset_index(drop=True)
+    if num_duplicates == 0:
+        print(f"In '{name}': No duplicates found.")
+    else:
+        total_duplicated_rows = df.duplicated(keep=False).sum()
+        unique_records_with_dupes = total_duplicated_rows - num_duplicates
+        print(f"In '{name}': {unique_records_with_dupes} original records produced {num_duplicates} extra copies.")
 
 
-# mostra quali valori sono mancanti e dove
+# Calcola la percentuale di valori mancanti per ogni colonna
 def check_missing(df, name="DataFrame"):
     null_count = df.isnull().sum()
     missing_cols = null_count[null_count > 0]
@@ -33,16 +31,7 @@ def check_missing(df, name="DataFrame"):
             print(f"In {name:<25} col: {col:<25} missing: {perc:{precision}}%")
 
 
-# cancella le righe con tutti i valori NaN
-def drop_empty_rows(df, name="DataFrame"):
-    initial_count = len(df)
-    df_cleaned = df.dropna(how='all')
-    removed = initial_count - len(df_cleaned)
-    if removed > 0:
-        print(f"In {name}: removed {removed} empty rows")
-    return df_cleaned
-
-# mostra se un valore è unico
+# Verifica se una colonna ha valori univoci per essere usata come indice
 def check_unique(df, col):
     if col in df.columns:
         if df[col].is_unique:
@@ -54,9 +43,26 @@ def check_unique(df, col):
     else:
         print(f"Column '{col}' does not exist in the DataFrame.")
         return False
+
+
+# --- FUNZIONI DI TRASFORMAZIONE ---
+
+# Rimuove i duplicati e resetta l'indice
+def clean_duplicates(df):
+    return df.drop_duplicates().reset_index(drop=True)
+
+
+# Rimuove le righe che contengono solo valori NaN
+def drop_empty_rows(df, name="DataFrame"):
+    initial_count = len(df)
+    df_cleaned = df.dropna(how='all')
+    removed = initial_count - len(df_cleaned)
+    if removed > 0:
+        print(f"In {name}: removed {removed} empty rows")
+    return df_cleaned
     
 
-# converte in ToDateTime
+# Converte una colonna in datetime gestendo formati misti (es. solo anno o data completa)
 def convert_to_datetime(df, column_name):
     if column_name in df.columns:
         df[column_name] = pd.to_datetime(df[column_name], errors='coerce', format='%Y').fillna(
@@ -68,7 +74,7 @@ def convert_to_datetime(df, column_name):
     return df
 
 
-# riempe i valori NaN negli object con 'Unknown'
+# Sostituisce i NaN nelle colonne di tipo 'object' con 'Unknown'
 def fill_object_nan(df, replacement="Unknown"):
     obj_cols = df.select_dtypes(include=['object']).columns
     df[obj_cols] = df[obj_cols].fillna(replacement)
