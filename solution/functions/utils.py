@@ -79,119 +79,251 @@ def convert_to_datetime(df, column_name):
 # --- FUNZIONI DI VISUALIZZAZIONE ---
 
 # Analizza l'evoluzione temporale della produzione di anime  
-def plot_production_volume(df, start_year=None, end_year=2025):
-    if start_year is None:
-        start_year = int(df['year'].min())
-    if end_year is None:
-        end_year = int(df['year'].max())
-
-    mask = (df['year'] >= start_year) & (df['year'] <= end_year)
-    yearly_counts = df[mask].groupby('year')['mal_id'].count().reset_index()
+def plot_yearly_production(df, start_year=1915, end_year=2025):
+    df_temp = df.copy()
+    df_temp['year_filled'] = df_temp['year'].fillna(df_temp['start_date'].dt.year)
+    exclude_types = ['Music', 'CM', 'PV']
+    df_temp = df_temp[(df_temp['type'].notna()) & (~df_temp['type'].isin(exclude_types))]
+    
+    yearly_counts = df_temp.groupby('year_filled')['mal_id'] \
+                      .count() \
+                      .reindex(range(start_year, end_year+1), fill_value=0) \
+                      .reset_index()
     yearly_counts.columns = ['year', 'count']
-
+    
     plt.figure(figsize=(15, 6))
-    sns.set_style("whitegrid")
-    
-    ax = sns.barplot(data=yearly_counts, x='year', y='count', color='steelblue', edgecolor='black', alpha=0.8)
-    
-    plt.title(f'Annual Anime Production Volume ({start_year} - {end_year})', fontsize=16, pad=20)
-    plt.xlabel('Release Year', fontsize=12)
-    plt.ylabel('Number of Titles Produced', fontsize=12, fontweight='bold')
-    
-    for i, label in enumerate(ax.get_xticklabels()):
-        if i % 5 != 0:
-            label.set_visible(False)
+    sns.set_style("whitegrid") 
+    plt.fill_between(yearly_counts['year'], yearly_counts['count'], color="Purple", alpha=0.3)
+    plt.plot(yearly_counts['year'], yearly_counts['count'], color="Purple", lw=2) 
+    plt.title(f'Production Over Time ({start_year} - {end_year})', fontsize=16, fontweight='bold', pad=20)
+    plt.xlabel('Year', fontsize=12, fontweight='bold')
+    plt.ylabel('Number of Titles', fontsize=12, fontweight='bold')
+    plt.xticks(ticks=range(start_year, end_year + 1, 5))
+    plt.grid(visible=True, which='major', axis='both', linestyle=':', alpha=0.5) 
+    plt.ylim(0, yearly_counts['count'].max() * 1.05)
 
+    plt.xlim(start_year, end_year + 2)
     plt.tight_layout()
     plt.show()
 
 
 #  Analizza il volume di produzione per fonte
-def plot_production_evolution_by_source(df, start_year=None, end_year=2025):
-   df_clean = df[(df['source'] != 'Unknown') & (df['source'].notna())].copy() 
-   top_sources = df_clean[df_clean['year'].notna()]['source'].value_counts().nlargest(5).index.tolist()
-   if start_year is None: start_year = int(df_clean['year'].min()) 
-   mask = (df_clean['year'] >= start_year) & (df_clean['year'] <= end_year) & (df_clean['source'].isin(top_sources)) 
-   df_filtered = df_clean[mask] 
-   source_time = df_filtered.groupby(['year', 'source']).size().unstack(fill_value=0) 
-   source_time = source_time.reindex(columns=top_sources) 
-   plt.figure(figsize=(15, 8)) 
-   sns.set_style("whitegrid") 
-   source_time.plot(kind='line', ax=plt.gca(), marker='o', markersize=4, linewidth=2.5)
-   plt.title(f'Annual Production Volume by Source ({start_year} - {end_year})', fontsize=16, pad=20) 
-   plt.xlabel('Release Year', fontsize=12) 
-   plt.ylabel('Number of Titles Produced', fontsize=12, fontweight='bold') 
-   plt.legend(title='Source', loc='upper left', frameon=True) 
-   plt.tight_layout() 
-   plt.show()
+def plot_production_by_source(df, start_year=1915, end_year=2025):
+    df_temp = df.copy()
+    df_temp['year_filled'] = df_temp['year'].fillna(df_temp['start_date'].dt.year)
+    df_temp = df_temp[(df_temp['source'].notna()) & (df_temp['source'] != 'Unknown')]
+    exclude_types = ['Music', 'CM', 'PV']
+    df_temp = df_temp[(df_temp['type'].notna()) & (~df_temp['type'].isin(exclude_types))]
 
-
-#  Mostra la popolarità totale delle fonti di produzione (Source)
-def plot_source_popularity(df):
-    df_clean = df[(df['source'] != 'Unknown') & (df['source'].notna())].copy()
-    source_counts = df_clean['source'].value_counts()
-    plt.figure(figsize=(12, 7))
+    top_sources = df_temp['source'].value_counts().nlargest(5).index.tolist()
+    df_temp = df_temp[(df_temp['year_filled'] >= start_year) & (df_temp['year_filled'] <= end_year) & (df_temp['source'].isin(top_sources))]
+    
+    source_time = df_temp.groupby(['year_filled', 'source']).size().unstack(fill_value=0)
+    source_time = source_time.reindex(columns=top_sources)
+    plt.figure(figsize=(15,6))
     sns.set_style("whitegrid")
-    sns.barplot(
-        x=source_counts.values, 
-        y=source_counts.index, 
-        hue=source_counts.index, 
-        palette='viridis', 
-        legend=False
-    )
-    plt.title('Total Popularity by Source', fontsize=16, pad=20)
-    plt.xlabel('Total Number of Titles', fontsize=12, fontweight='bold')
-    plt.ylabel('Source', fontsize=12)
-    for i, v in enumerate(source_counts.values):
-        plt.text(v + 100, i, str(v), color='black', va='center', fontweight='bold')
+    source_time.plot(kind='line', ax=plt.gca(), linewidth=2.5)
+    plt.grid(visible=True, which='major', axis='both', linestyle=':', alpha=0.5)
+    plt.title(f'Production by Source Over Time ({start_year} - {end_year})', fontsize=16, pad=20)
+    plt.xlabel('Year', fontsize=12, fontweight='bold')
+    plt.ylabel('Number of Titles', fontsize=12, fontweight='bold')
+    plt.xticks(ticks=range(start_year, end_year + 1, 5))
+    plt.legend(title='Source', loc='upper left', frameon=True)
 
+    plt.xlim(start_year, end_year + 2)
     plt.tight_layout()
     plt.show()
 
 
-# Mostra la popolarità dei generi nel tempo.
-def plot_genre_production_by_year(df, start_year=None, end_year=2025, top_n=5):
-    df_clean = df.copy()
-    df_clean = df_clean[df_clean['genres'].notna()]
-    df_clean['genres'] = (
-        df_clean['genres']
-        .str.strip('[]')
-        .str.split(',')
-        .apply(lambda x: [g.strip() for g in x] if isinstance(x, list) else x)
-    )
-    df_exploded = df_clean.explode('genres')
-    if start_year is None:
-        start_year = int(df_exploded['year'].min())
-    mask = (df_exploded['year'] >= start_year) & (df_exploded['year'] <= end_year)
-    df_filtered = df_exploded[mask]
-    top_genres = (
-        df_filtered['genres']
-        .value_counts()
-        .nlargest(top_n)
-        .index
-    )
-    df_filtered = df_filtered[df_filtered['genres'].isin(top_genres)]
-    genre_year = (
-        df_filtered
-        .groupby(['year', 'genres'])
-        .size()
-        .unstack(fill_value=0)
-        .reindex(columns=top_genres)
-    )
-    plt.figure(figsize=(16, 8))
+# Analizza la popolarità degli anime nel tempo
+def plot_popularity(df, start_year=1960, end_year=2025):
+    df_temp = df.copy()
+    df_temp['year_filled'] = df_temp['year'].fillna(df_temp['start_date'].dt.year)
+    df_temp = df_temp[(df_temp['year_filled'] >= start_year) & 
+                      (df_temp['year_filled'] <= end_year) & 
+                      df_temp['members'].notna()]
+
+    exclude_types = ['Music', 'CM', 'PV']
+    df_temp = df_temp[(df_temp['type'].notna()) & 
+                      (~df_temp['type'].isin(exclude_types)) & 
+                      (df_temp['scored_by'] > 1500) & 
+                      (df_temp['members'] > 1500)]
+
+    summary = df_temp.groupby('year_filled')['members'].mean().reset_index()
+    summary.columns = ['year', 'avg_members']
+
+    all_years = pd.DataFrame({'year': range(start_year, end_year + 1)})
+    summary = pd.merge(all_years, summary, on='year', how='left').fillna(0)
+
+    plt.figure(figsize=(15,6))
     sns.set_style("whitegrid")
-    genre_year.plot(
-        kind='bar',
-        stacked=True,
-        ax=plt.gca()
-    )
-    plt.title(
-        f'Anime Production by Genre per Year ({start_year}–{end_year})',
-        fontsize=16,
-        pad=20
-    )
-    plt.xlabel('Release Year', fontsize=12)
+    sns.lineplot(data=summary, x='year', y='avg_members', color='seagreen', linewidth=2)
+
+    max_row = summary.loc[summary['avg_members'].idxmax()]
+    plt.scatter(max_row['year'], max_row['avg_members'], color='darkslategray', s=50, zorder=5)
+    plt.annotate(f"Peak: {int(max_row['year'])}", 
+                 xy=(max_row['year'], max_row['avg_members']), 
+                 xytext=(0, 7), textcoords='offset points', 
+                 ha='center', color='black')
+
+    plt.fill_between(summary['year'], summary['avg_members'], color='seagreen', alpha=0.2)
+    plt.ticklabel_format(style='plain', axis='y')
+    plt.xticks(ticks=range(start_year, end_year + 1, 5))
+    plt.title(f'Popularity Over Time ({start_year} - {end_year})', fontsize=16, pad=20)
+    plt.xlabel('Year', fontsize=12, fontweight='bold')
+    plt.ylabel('Members', fontsize=12, fontweight='bold')
+    plt.grid(visible=True, which='major', axis='both', linestyle=':', alpha=0.5)
+    plt.xlim(start_year, end_year + 2)
+    plt.tight_layout()
+    plt.show()
+
+
+# Analizza la valutazione media nel tempo
+def plot_score(df, start_year=1960, end_year=2025):
+    df_temp = df.copy()
+    df_temp['year_filled'] = df_temp['year'].fillna(df_temp['start_date'].dt.year)
+    df_temp = df_temp[(df_temp['year_filled'] >= start_year) & (df_temp['year_filled'] <= end_year) & (df_temp['score'].notna())]
+    exclude_types = ['Music', 'CM', 'PV']
+    df_temp = df_temp[(df_temp['type'].notna()) &
+                    (~df_temp['type'].isin(exclude_types)) &
+                    (df_temp['scored_by'] > 1500) &
+                    (df_temp['members'] > 1500)]
+
+    summary = df_temp.groupby('year_filled')['score'].mean().reset_index()
+    summary.columns = ['year', 'avg_score']
+    
+    all_years = pd.DataFrame({'year': range(start_year, end_year + 1)})
+    summary = pd.merge(all_years, summary, on='year', how='left').fillna(0)
+
+    plt.figure(figsize=(15,6))
+    sns.set_style("whitegrid")
+    sns.lineplot(data=summary, x='year', y='avg_score', color='mediumpurple', linewidth=2.5)
+    plt.fill_between(summary['year'], summary['avg_score'], color='mediumpurple', alpha=0.2)
+    max_row = summary.loc[summary['avg_score'].idxmax()]
+    plt.scatter(max_row['year'], max_row['avg_score'], color='rebeccapurple', s=50, zorder=5)
+    
+    plt.annotate(f"Peak: {max_row['avg_score']:.2f} ({int(max_row['year'])})", 
+                 xy=(max_row['year'], max_row['avg_score']),
+                 xytext=(0, 10), textcoords='offset points',
+                 ha='center', color='black')
+
+    plt.xticks(ticks=range(start_year, end_year + 1, 5))
+    plt.ticklabel_format(style='plain', axis='y')
+    plt.ylim(summary['avg_score'].min() - 0.5, 10) 
+    plt.title(f'Score Over Time ({start_year} - {end_year})', fontsize=16, pad=20)
+    plt.xlabel('Year', fontsize=12, fontweight='bold')
+    plt.ylabel('Score', fontsize=12, fontweight='bold')
+    plt.grid(visible=True, which='major', axis='both', linestyle=':', alpha=0.5)
+    
+    plt.xlim(start_year, end_year + 2)
+    plt.tight_layout()
+    plt.show()
+
+
+
+# Confronta Popularity e Score
+def plot_popularity_vs_score(df, start_year=1960, end_year=2025):
+    df_temp = df.copy()
+    df_temp['year_filled'] = df_temp['year'].fillna(df_temp['start_date'].dt.year)
+    df_temp = df_temp[(df_temp['year_filled'] >= start_year) & 
+                      (df_temp['year_filled'] <= end_year) & 
+                      (df_temp['scored_by'] > 2000) &
+                      (df_temp['members'] > 2000)]
+    
+    exclude_types = ['Music', 'CM', 'PV']
+    df_temp = df_temp[(df_temp['type'].notna()) & ~df_temp['type'].isin(exclude_types)]
+
+    summary = df_temp.groupby('year_filled').agg({
+        'members': 'mean',
+        'score': 'mean'
+    }).reset_index()
+
+    all_years = pd.DataFrame({'year_filled': range(start_year, end_year + 1)})
+    summary = pd.merge(all_years, summary, on='year_filled', how='left').fillna(0)
+    
+    fig, ax1 = plt.subplots(figsize=(15, 7))
+    sns.set_style("whitegrid")
+
+    # Popularity
+    ax1.set_xlabel('Year', fontsize=12, fontweight='bold')
+    ax1.set_ylabel('Members', fontsize=12, fontweight='bold', color='seagreen')
+    sns.lineplot(data=summary, x='year_filled', y='members', color='seagreen', linewidth=2.5, ax=ax1)
+    ax1.ticklabel_format(style='plain', axis='y')
+
+    # Score
+    ax2 = ax1.twinx()
+    ax2.set_ylabel('Score', fontsize=12, fontweight='bold', color='mediumpurple')
+    sns.lineplot(data=summary, x='year_filled', y='score', color='mediumpurple', linewidth=2.5 , ax=ax2)
+    
+    pop_max = summary['members'].max()
+    ax1.set_ylim(bottom=-pop_max * 0.05, top=pop_max * 1.05)
+    ax2.set_ylim(bottom=-0.5, top=10.5)
+
+    plt.xlim(left=start_year, right=end_year + 2)
+    ax1.set_xticks(range(start_year, end_year + 1, 5))
+
+    plt.title(f'Popularity vs Score Over Time ({start_year} - {end_year})', fontsize=18, pad=25)
+    
+    ax1.grid(visible=True, which='major', axis='both', linestyle=':', alpha=0.5)
+    ax2.grid(False) 
+    fig.tight_layout()
+    plt.show()
+
+
+# Analizza il numero di episodi medi per anno
+def plot_episodes(df, start_year=1960, end_year=2025):
+    df_temp = df.copy()
+    df_temp['year_filled'] = df_temp['year'].fillna(df_temp['start_date'].dt.year)
+    df_temp = df_temp[
+        (df_temp['type'].notna()) & 
+        (df_temp['type'].isin(['TV', 'ONA'])) &
+        (df_temp['episodes'].notna()) &
+        (df_temp['status'] == 'Finished Airing')
+    ]
+
+    summary = df_temp.groupby('year_filled')['episodes'].agg(['mean', 'count']).reset_index()
+    summary.columns = ['year', 'avg_episodes', 'title_count']
+    summary = summary.set_index('year').reindex(range(start_year, end_year + 1), fill_value=0).reset_index()
+
+    plt.figure(figsize=(15, 6))
+    sns.set_style("whitegrid")
+    sns.barplot(data=summary, x='year', y='avg_episodes', color='cornflowerblue', alpha=0.7)
+
+    for i, row in summary.iterrows():
+        if row['title_count'] > 0 and row['title_count'] <= 10:
+            plt.text(i, row['avg_episodes'], f"({int(row['title_count'])})", 
+                     ha='center', va='bottom', fontsize=12, color='black', fontweight='bold')
+    
+    years = summary['year'].unique()
+    plt.xticks(ticks=[i for i, year in enumerate(years) if year % 5 == 0], 
+               labels=[int(year) for year in years if year % 5 == 0])
+    
+    plt.title(f'Number of Episodes Over Time ({start_year} - {end_year})', fontsize=16, pad=20)
+    plt.xlabel('Year', fontsize=12, fontweight='bold')
+    plt.ylabel('Number of Episodes', fontsize=12, fontweight='bold')
+    plt.grid(visible=True, which='major', axis='both', linestyle=':', alpha=0.5)
+    plt.tight_layout()
+    plt.show()
+
+
+# Analizza il numero di anime medi usciti ogni stagione
+def plot_season(df):
+    df_temp = df.copy()
+    df_temp = df_temp[df_temp['season'].notna()]
+    exclude_types = ['Music', 'CM', 'PV']
+    df_temp = df_temp[(df_temp['type'].notna()) & ~df_temp['type'].isin(exclude_types)]
+    season_order = ['winter', 'spring', 'summer', 'fall']
+    seasonal_counts = df_temp['season'].value_counts().reindex(season_order).reset_index()
+    seasonal_counts.columns = ['season', 'count']
+
+    plt.figure(figsize=(10, 6))
+    sns.set_style("whitegrid") 
+    colors = ['#A188BE', '#91C483', '#FFD384', '#E68A8A'] 
+
+    sns.barplot(data=seasonal_counts, x='season', y='count',  hue='season', palette=colors, legend=False)
+    plt.grid(visible=True, axis='y', linestyle=':', alpha=0.5)
+    plt.title('Releases by Season', fontsize=16, pad=20)
+    plt.xlabel('Season', fontsize=12, fontweight='bold')
     plt.ylabel('Number of Titles', fontsize=12, fontweight='bold')
-    plt.legend(title='Genre', bbox_to_anchor=(1.02, 1), loc='upper left')
     plt.tight_layout()
     plt.show()
