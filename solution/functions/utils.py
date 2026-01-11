@@ -89,11 +89,9 @@ def drop_key_missing(df, key_column, df_name="DataFrame"):
 
 # Converte una colonna in datetime gestendo formati misti (es. solo anno o data completa)
 def convert_to_datetime(df, column_name):
-    if column_name in df.columns:
-        df[column_name] = pd.to_datetime(df[column_name], errors='coerce', format='%Y').fillna(
-            pd.to_datetime(df[column_name], errors='coerce')).infer_objects(copy=False)
-    else:
-        print(f"Column '{column_name}' not found in DataFrame.")
+    df_temp = pd.to_datetime(df[column_name], errors='coerce', format='%Y')
+    df_temp = df_temp.fillna(pd.to_datetime(df[column_name], errors='coerce'))
+    df[column_name] = df_temp
     return df
 
 # --- FUNZIONI DI VISUALIZZAZIONE ---
@@ -363,7 +361,8 @@ def plot_genre_trend(df, default_genre='Action'):
     fig = go.Figure()
     for genre in genres:
         df_genre = time_genre[time_genre['genres_list'] == genre]
-        fig.add_trace(go.Scatter(x=df_genre['year_filled'],y=df_genre['count'], mode='lines+markers', name=genre, visible=(genre == default_genre), line=dict(color= "#3EA836")))
+        fig.add_trace(go.Scatter(x=df_genre['year_filled'],y=df_genre['count'], mode='lines+markers', name=genre, 
+                                 visible=(genre == default_genre), line=dict(color= "#19D3F3")))
     
     buttons = []
 
@@ -692,3 +691,38 @@ def plot_score_location(profiles_df, ratings_df, details_df):
     ax.grid(False)
     ax.set_title('Global Distribution of Average Anime Ratings', fontsize=16)
     plt.show()
+
+
+# --- ANALISI 4 ---
+
+def plot_language_trend(person_voice_works_df, details_df, default_lang='Italian'):
+    df_temp = person_voice_works_df.merge(
+        details_df[['mal_id', 'year', 'start_date']], 
+        left_on='anime_mal_id', 
+        right_on='mal_id', 
+        how='left'
+    )
+    df_temp['year_filled'] = df_temp['year'].fillna(df_temp['start_date'].dt.year)
+    df_temp = df_temp[df_temp['year_filled'] <= 2025]
+    df_temp = df_temp[df_temp['language'].str.lower() != 'japanese']
+    
+    time_lang = df_temp.groupby(['year_filled', 'language']).size().reset_index(name='count')
+    languages = sorted(time_lang['language'].unique())
+    colors = ["#FA2626", "#FFB03A", "#00CC96", "#AB63FA", "#5039FF", "#19D3F3", "#FF6792", "#C1FF7E", "#25AB54", "#FF6BE1"]
+    fig = go.Figure()
+    for i, lang in enumerate(languages):
+        color = colors[i % len(colors)]
+        df_lang = time_lang[time_lang['language'] == lang]
+        fig.add_trace(go.Scatter(x=df_lang['year_filled'],y=df_lang['count'],mode='lines+markers',name=lang,
+            visible=(lang.lower() == default_lang.lower()), line=dict(color=color) ))
+    buttons = []
+    for i, lang in enumerate(languages):
+        visible = [False] * len(languages)
+        visible[i] = True
+        buttons.append(dict(label=lang,method="update",args=[{"visible": visible}, {"title": f"Trend of {lang} Dubbing Over Time"}]))
+   
+    active_idx = languages.index(default_lang) if default_lang in languages else 0
+    fig.update_layout(updatemenus=[dict(active=active_idx,buttons=buttons,x=1.15,y=1.2)],
+        title=f"Trend of: {default_lang} Dubbing Over Time",xaxis_title="Year",yaxis_title="Number of Dubbings",width=900,
+        height=500, plot_bgcolor="#f2f2f2", yaxis=dict(range=[0, time_lang['count'].max() + 1000]) )
+    fig.show()
