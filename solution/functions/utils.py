@@ -1,7 +1,9 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 import seaborn as sns
 import numpy as np
+import geopandas as gpd
 
 # --- FUNZIONI DI DIAGNOSI ---
 
@@ -90,12 +92,13 @@ def convert_to_datetime(df, column_name):
     if column_name in df.columns:
         df[column_name] = pd.to_datetime(df[column_name], errors='coerce', format='%Y').fillna(
             pd.to_datetime(df[column_name], errors='coerce')).infer_objects(copy=False)
-        print(f"Column '{column_name}' successfully converted.")
     else:
         print(f"Column '{column_name}' not found in DataFrame.")
     return df
 
 # --- FUNZIONI DI VISUALIZZAZIONE ---
+
+# --- Analisi Temporale ---
 
 # Analizza l'evoluzione temporale della produzione di anime  
 def plot_yearly_production(df, start_year=1915, end_year=2025):
@@ -331,26 +334,56 @@ def plot_episodes(df, start_year=1960, end_year=2025):
     plt.tight_layout()
     plt.show()
 
-# --- ANALISI 2 ---
-#
+# --- Analisi Generi/Demografiche --- ---
+
 def plot_genres(df):
     df_temp = df['genres'].apply(eval).explode()
     genre_counts = df_temp.value_counts().reset_index()
     genre_counts.columns = ['genre', 'count']
     plt.figure(figsize=(15,8))
-    sns.barplot(data=genre_counts, x='count', y='genre', hue='genre', palette='viridis')
+    ax = sns.barplot(data=genre_counts, x='count', y='genre', hue='genre', palette='viridis')
+    for container in ax.containers:
+        ax.bar_label(container, padding=3)
     plt.title('Genre Distribution', fontsize=16)
     plt.xlabel('Number of Anime', fontsize=12, fontweight='bold')
     plt.ylabel('Genres', fontsize=12, fontweight='bold')
     plt.tight_layout()
     plt.show()
 
+
+def plot_genre_trend(df, default_genre='Action'):
+    df_temp = df.copy()
+    df_temp['year_filled'] = df_temp['year'].fillna(df_temp['start_date'].dt.year)
+    df_temp = df_temp[df_temp['year_filled'] <= 2025]
+    df_temp = df_temp.assign(genres_list=df_temp['genres'].apply(eval)).explode('genres_list')
+
+    time_genre = df_temp.groupby(['year_filled', 'genres_list']).size().reset_index(name='count')
+    genres = sorted(time_genre['genres_list'].unique())
+
+    fig = go.Figure()
+    for genre in genres:
+        df_genre = time_genre[time_genre['genres_list'] == genre]
+        fig.add_trace(go.Scatter(x=df_genre['year_filled'],y=df_genre['count'], mode='lines+markers', name=genre, visible=(genre == default_genre), line=dict(color= "#3EA836")))
+    
+    buttons = []
+
+    for i, genre in enumerate(genres):
+        visible = [False] * len(genres)
+        visible[i] = True
+        buttons.append(dict(label=genre, method="update", args=[{"visible": visible}, {"title": f"Trend of {genre} Anime Over Time"}]))
+   
+    fig.update_layout(updatemenus=[dict(active=genres.index(default_genre) if default_genre in genres else 0, buttons=buttons, x=1.15, y=1.2)],
+        title=f"Trend of {default_genre} Anime Over Time", xaxis_title="Year",yaxis_title="Number of Anime",width=900,height=500, 
+        plot_bgcolor="#f2f2f2", yaxis=dict(range=[0, 400]))
+    fig.show()
+
+
 #
 def plot_demographics(df):
     df_temp = df['demographics'].apply(eval).explode()
     demographic_counts = df_temp.value_counts()
     colors = plt.cm.Pastel1(range(len(demographic_counts)))
-    fig, ax = plt.subplots(figsize=(12, 8)) 
+    fig, ax = plt.subplots(figsize=(15, 8)) 
     wedges, texts, autotexts = ax.pie(
         demographic_counts,
         labels=demographic_counts.index,
@@ -361,11 +394,39 @@ def plot_demographics(df):
         pctdistance=0.85 
     )
     plt.setp(autotexts, size=10, weight="bold", color="black")
-    plt.setp(texts, size=12)
+    plt.setp(texts, size=12, weight="bold")
     ax.set_title('Demographic Distribution', fontsize=15, pad=20)
     plt.axis('equal') 
     plt.tight_layout()
     plt.show()
+
+def plot_demographics_over_years(df, start_year=1915, end_year=2025):
+    df_temp = df.copy()
+    df_temp['year_filled'] = df_temp['year'].fillna(df_temp['start_date'].dt.year)
+    df_temp = df_temp[df_temp['year_filled'] <= 2025]
+    df_temp = df_temp.assign(demographic_list=df_temp['demographics'].apply(eval)).explode('demographic_list')
+    counts = df_temp.groupby(['year_filled', 'demographic_list']).size().unstack(fill_value=0).sort_index()
+
+    #per tenere gli stessi colori del pie chart
+    freq_order = df_temp['demographic_list'].value_counts().index
+    counts = counts[freq_order]
+
+    n_colors = len(counts.columns)
+    palette = plt.cm.Pastel1(range(n_colors))
+
+    sns.set_style("whitegrid")
+    plt.figure(figsize=(15,6))
+    counts.plot(kind='line', ax=plt.gca(), linewidth=2.5, color=palette)
+    plt.grid(visible=True, which='major', axis='both', linestyle=':', alpha=0.5)
+    plt.title(f'Demographics Over Time ({start_year} - {end_year})', fontsize=16, pad=20)
+    plt.xlabel('Year', fontsize=12, fontweight='bold')
+    plt.ylabel('Number of Titles', fontsize=12, fontweight='bold')
+    plt.xticks(ticks=range(start_year, end_year + 1, 5))
+    plt.legend(title='Demographics', loc='upper left', frameon=True)
+    plt.xlim(start_year, end_year + 2)
+    plt.tight_layout()
+    plt.show()
+
 
 #
 def plot_male_demographics(df):
@@ -446,4 +507,188 @@ def plot_genres_score(df):
     sns.despine(bottom=True)
     plt.grid(axis='y', linestyle='--', alpha=0.3) 
     plt.tight_layout()
+    plt.show()
+
+
+# --- ANALISI 3 ---
+
+def plot_profile_gender(df):
+    df_temp = df['gender'].value_counts()
+    colors = plt.cm.Set2(range(len(df_temp)))
+    fig, ax = plt.subplots(figsize=(15, 8)) 
+    wedges, texts, autotexts = plt.pie(df_temp,labels=df_temp.index,autopct='%1.1f%%',startangle=140, 
+                                    wedgeprops={'edgecolor': 'white', 'linewidth': 1.5}, pctdistance=0.85, colors=colors)
+    
+    plt.setp(autotexts, size=12, weight="bold", color="black")
+    plt.setp(texts, size=12, weight="bold")
+    ax.set_title('Users Gender Distribution', fontsize=15, pad=20)
+    plt.axis('equal')
+    plt.tight_layout()
+    plt.show()
+
+def plot_genre_by_gender(ratings_df, profiles_df, details_df):
+    df_temp = ratings_df[ratings_df['status'].isin(['completed', 'watching'])][['username', 'anime_id']]
+    df_temp = pd.merge(df_temp, profiles_df[['username', 'gender']], on='username')
+    df_temp = df_temp.groupby(['gender', 'anime_id']).size().reset_index(name='view_count')
+    df_temp = pd.merge(df_temp, details_df[['mal_id', 'genres']], left_on='anime_id', right_on='mal_id')
+    df_temp['genres'] = df_temp['genres'].apply(eval)
+    df_temp = df_temp.explode('genres')
+    top_genres_gender = df_temp.groupby(['gender', 'genres'])['view_count'].sum().reset_index(name='total_views')
+
+    df_male = top_genres_gender[top_genres_gender['gender'] == 'Male'].nlargest(10, 'total_views')
+    df_female = top_genres_gender[top_genres_gender['gender'] == 'Female'].nlargest(10, 'total_views')
+    df_nb = top_genres_gender[top_genres_gender['gender'] == 'Non-Binary'].nlargest(10, 'total_views')
+
+    # female
+    custom_oranges = sns.light_palette("#fc8d62", n_colors=12, reverse=True)[2:12]
+    plt.figure(figsize=(15, 8))
+    patches, texts, autotexts = plt.pie(df_female['total_views'], labels=df_female['genres'], autopct='%1.1f%%', startangle=140, 
+        colors=custom_oranges, pctdistance=0.85, radius=0.8, wedgeprops={'edgecolor': "#a75d40", 'linewidth': 1.5})
+    centre_circle = plt.Circle((0,0), 0.45, fc='white', edgecolor='#a75d40', linewidth=1)
+    plt.gca().add_artist(centre_circle)
+    plt.setp(autotexts, size=11, weight="bold")
+    plt.title('Top 10 Genres - Female Users', fontweight='bold', fontsize=15, pad=20)
+    plt.axis('equal')  
+    plt.tight_layout()
+    plt.show()
+
+    #male
+    plt.figure(figsize=(15, 8))
+    custom_greens = sns.light_palette("#66c2a5", n_colors=12, reverse=True)[2:12]
+    patches, texts, autotexts = plt.pie(df_male['total_views'], labels=df_male['genres'], autopct='%1.1f%%', startangle=140, 
+        colors=custom_greens, pctdistance=0.75, radius=0.8, wedgeprops={'edgecolor': "#3f7f6b", 'linewidth': 1.5})
+    centre_circle = plt.Circle((0,0), 0.45, fc='white', edgecolor="#3f7f6b", linewidth=1)
+    plt.gca().add_artist(centre_circle)
+    plt.setp(autotexts, size=11, weight="bold")
+    plt.title('Top 10 Genres - Male Users', fontweight='bold', fontsize=15, pad=20)
+    plt.axis('equal')  
+    plt.tight_layout()
+    plt.show()
+
+    #non-binary
+    plt.figure(figsize=(15, 8))
+    custom_purples = sns.light_palette("#8da0cb", n_colors=12, reverse=True)[2:12]
+    patches, texts, autotexts = plt.pie(df_nb['total_views'], labels=df_nb['genres'], autopct='%1.1f%%', startangle=140, 
+        colors=custom_purples, pctdistance=0.75, radius=0.8, wedgeprops={'edgecolor': "#596683", 'linewidth': 1.5})
+    centre_circle = plt.Circle((0,0), 0.45, fc='white', edgecolor='#596683', linewidth=1)
+    plt.gca().add_artist(centre_circle)
+    plt.setp(autotexts, size=11, weight="bold", color="black")
+    plt.title('Top 10 Genres - Non-Binary Users', fontweight='bold', fontsize=15, pad=20)
+    plt.axis('equal')  
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_profile_age(df):
+    today = pd.Timestamp('today')
+    df_temp = df[(df['birthday'].dt.year >= 1900) & (df['birthday'] <= today)]
+    ages = (today - df_temp['birthday']).dt.days // 365 
+    mean_age = ages.mean()
+    plt.figure(figsize=(12,6))
+    plt.hist(ages.dropna(), bins=range(0, 91, 5), color='navy', edgecolor='white')
+    plt.axvline(mean_age, color='red', linestyle='--', linewidth=2, label=f'Mean Age: {mean_age:.1f}')
+    plt.title('Average User Age', fontsize=16, pad=20)
+    plt.xlabel('Age', fontsize=12, fontweight='bold')
+    plt.ylabel('Number of Users', fontsize=12, fontweight='bold')
+    plt.xlim(0, 75)
+    plt.grid(visible=True, which='major', axis='both', linestyle=':', alpha=0.5)
+    plt.legend(frameon=True)
+    plt.xticks(range(0, 91, 5))
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_profile_locations(df):
+    filepath = "./ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp"
+    df_temp = df["location"].value_counts().reset_index()
+    df_temp.columns = ['location', 'count']
+    world = gpd.read_file(filepath)
+
+    name_corrections = {
+        'United States': 'United States of America',
+        'South Korea': 'Korea, Republic of',
+        'Vietnam': 'Viet Nam'
+    }
+    df_temp['location'] = df_temp['location'].replace(name_corrections)
+    world_users = world.merge(df_temp, left_on='NAME', right_on='location', how='left')
+    world_users['count'] = world_users['count'].fillna(0)
+
+    world_zero = world_users[world_users['count'] == 0]
+    world_nonzero = world_users[world_users['count'] > 0]
+    
+    fig, ax = plt.subplots(1, 1, figsize=(15, 10))
+    world_zero.plot(ax=ax, color='lightgrey', edgecolor='black', linewidth=0.5)
+    world_nonzero.plot(column='count', ax=ax, legend=True,cmap='OrRd', edgecolor='black', linewidth=0.5,
+                     legend_kwds={'label': "Number of Users", 'orientation': "horizontal"})
+    
+    ax.grid(False)
+    ax.set_title('User Locations Worldwide', fontsize=16)
+    plt.show()
+
+def plot_demographic_by_age(profiles_df, details_df, ratings_df):
+    profiles_temp = profiles_df.copy()
+    profiles_temp['birthday'] = pd.to_datetime(profiles_temp['birthday'], errors='coerce')
+    profiles_temp['age'] = 2026 - profiles_temp['birthday'].dt.year
+    bins = [10, 20, 30, 50, 80]
+    labels = ['Teenagers', 'Young Adults', 'Adults', 'Seniors']
+    profiles_temp['age_group'] = pd.cut(profiles_temp['age'], bins=bins, labels=labels)
+
+    details_temp = details_df[['mal_id', 'demographics']].copy()
+    details_temp['demographics'] = details_temp['demographics'].apply(eval)
+    details_temp = details_temp.explode('demographics')
+
+    df_temp = ratings_df[ratings_df['status'].isin(['completed', 'watching'])][['username', 'anime_id']]
+    df_temp = pd.merge(df_temp, profiles_temp[['username', 'age_group']], on='username')
+    df_plot = pd.merge(df_temp, details_temp, left_on='anime_id', right_on='mal_id')
+
+    color_map = {
+        'Shounen': "#66A5D8",  
+        'Seinen': "#7AB66D",  
+        'Shoujo': "#FF92CC",   
+        'Josei': "#E9A2FF",   
+        'Kids': "#FFB488"  
+    }
+
+    ct = df_plot.groupby(['age_group', 'demographics'], observed=True).size().unstack(fill_value=0)
+    ct_norm = ct.div(ct.sum(axis=1), axis=0) * 100
+    category_order = ct_norm.sum().sort_values(ascending=True).index
+    ct_norm = ct_norm[category_order]
+    ax = ct_norm.plot(kind='bar', stacked=True, figsize=(15, 7), color=color_map, edgecolor='white')
+    plt.title('Most Viewed Demographic Targets by Age Group', fontsize=15)
+    plt.xlabel('')
+    plt.ylabel('Percentage of Total Views', fontweight='bold')
+    plt.legend(title='Demographics', bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.xticks(rotation=0)
+    ax.tick_params(axis='x', which='major', pad=10) 
+    ax.set_xticklabels(labels, fontweight='bold', fontsize=13)
+    ax.grid(False)
+    plt.subplots_adjust(bottom=0.2)
+    plt.tight_layout()
+    plt.show()
+
+def plot_score_location(profiles_df, ratings_df, details_df):
+    user_to_loc = profiles_df.set_index('username')['location'].to_dict()
+    ratings_fast = ratings_df[['username', 'anime_id']].copy()
+    ratings_fast['location'] = ratings_fast['username'].map(user_to_loc)
+    ratings_fast.dropna(subset=['location'], inplace=True)
+    geo_data = ratings_fast.merge(details_df[['mal_id', 'score']], left_on='anime_id', right_on='mal_id').groupby('location').agg(
+        mean_rating=('score', 'mean'),vote_count=('score', 'count')).reset_index()
+    filepath = "./ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp"
+    world = gpd.read_file(filepath)
+    name_corrections = {
+        'United States': 'United States of America',
+        'South Korea': 'Korea, Republic of',
+        'Vietnam': 'Viet Nam'
+    }
+    geo_data['location'] = geo_data['location'].replace(name_corrections)
+    world_users = world.merge(geo_data, left_on='NAME', right_on='location', how='left')
+    world_users['vote_count'] = world_users['vote_count'].fillna(0)
+    world_zero = world_users[world_users['vote_count'] == 0]
+    world_nonzero = world_users[world_users['vote_count'] > 0]
+    fig, ax = plt.subplots(1, 1, figsize=(15, 10))
+    world_zero.plot(ax=ax, color='lightgrey', edgecolor='black', linewidth=0.5)
+    world_nonzero.plot(column='mean_rating', ax=ax, legend=True,cmap='RdYlGn', edgecolor='black', linewidth=0.5,
+        legend_kwds={'label': "Average Anime Rating", 'orientation': "horizontal"})
+    ax.grid(False)
+    ax.set_title('Global Distribution of Average Anime Ratings', fontsize=16)
     plt.show()
