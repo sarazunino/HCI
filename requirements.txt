@@ -1,14 +1,7 @@
-pandas==2.1.0
-numpy==1.27.0
-matplotlib==3.8.0
-seaborn==0.12.3
-plotly==6.9.0
-geopandas==0.13.2
-jupyter==1.0.0
+pandas
+numpy
+matplotlib
+seaborn
+geopandas
+plotly
 
-# python -m venv venv       
-#venv\Scripts\activate    //    source venv/bin/activate  
-#pip install -r solution/requirements.txt
-
-# conda env create -f solution/environment.yml
-# conda activate hci_project
