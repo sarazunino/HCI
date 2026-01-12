@@ -5,11 +5,7 @@ import seaborn as sns
 import numpy as np
 import geopandas as gpd
 
-# --- FUNZIONI DI DIAGNOSI ---
-
-# Mostra le dimensioni (righe, colonne) del DataFrame
-def show_shape(df, name="DataFrame"):
-    print(f"{name}: {df.shape[0]} rows, {df.shape[1]} columns")
+# ----------------------- FUNZIONI DI PULIZIA  -----------------------
 
 # Mostra i dtypes
 def show_dtypes(df, name="DataFrame"):
@@ -23,11 +19,10 @@ def check_duplicates(df, name="DataFrame"):
         print(f"In '{name}': No duplicates found.")
         print()
     else:
-        total_duplicated_rows = df.duplicated(keep=False).sum()
-        unique_records_with_dupes = total_duplicated_rows - num_duplicates
-        print(f"In '{name}': {unique_records_with_dupes} original records produced {num_duplicates} extra copies.")
+        total = df.duplicated(keep=False).sum()
+        unique = total - num_duplicates
+        print(f"In '{name}': {unique} original records produced {num_duplicates} extra copies.")
         print()
-
 
 # Calcola la percentuale di valori mancanti per ogni colonna
 def check_missing(df, name="DataFrame"):
@@ -41,30 +36,12 @@ def check_missing(df, name="DataFrame"):
             precision = ".5f" if perc < 0.01 else ".2f"
             print(f"In {name:<25} col: {col:<25} missing: {perc:{precision}}%")
 
-
-# Verifica se una colonna ha valori univoci per essere usata come indice
-def check_unique(df, col):
-    if col in df.columns:
-        if df[col].is_unique:
-            print(f"'{col}' can be used as an index for the DataFrame.")
-            return True
-        else:
-            print(f"'{col}' cannot be used as an index because it is not unique.")
-            return False
-    else:
-        print(f"Column '{col}' does not exist in the DataFrame.")
-        return False
-
-
-# --- FUNZIONI DI TRASFORMAZIONE ---
-
 # Rimuove i duplicati e resetta l'indice
 def clean_duplicates(df, name="DataFrame"):
     old_len = len(df)
     df_cleaned = df.drop_duplicates().reset_index(drop=True)
     print(f"Dataset {name:<25}: new rows {len(df_cleaned)}, before was {old_len} rows, removed {old_len - len(df_cleaned)}")
     return df_cleaned
-
 
 # Rimuove le righe che contengono solo valori NaN
 def drop_empty_rows(df, name="DataFrame"):
@@ -87,30 +64,24 @@ def drop_key_missing(df, key_column, df_name="DataFrame"):
         print(f"Column '{key_column}' not found in {df_name}. No rows removed.")
         return df
 
-# Converte una colonna in datetime gestendo formati misti (es. solo anno o data completa)
+# Converte una colonna in datetime come visto a lezione
 def convert_to_datetime(df, column_name):
     df_temp = pd.to_datetime(df[column_name], errors='coerce', format='%Y')
-    df_temp = df_temp.fillna(pd.to_datetime(df[column_name], errors='coerce'))
+    df_temp = df_temp.fillna(pd.to_datetime(df[column_name], errors='coerce')).infer_objects(copy=False)
     df[column_name] = df_temp
     return df
 
-# --- FUNZIONI DI VISUALIZZAZIONE ---
 
-# --- Analisi Temporale ---
+# ----------------------- FUNZIONI DI VISUALIZZAZIONE -----------------------
 
-# Analizza l'evoluzione temporale della produzione di anime  
+# --- Evoluzione Temporale dell'Industria ---
+
+# Grafico dell'evoluzione temporale della produzione di anime  
 def plot_yearly_production(df, start_year=1915, end_year=2025):
-    df_temp = df.copy()
-    df_temp['year_filled'] = df_temp['year'].fillna(df_temp['start_date'].dt.year)
-    exclude_types = ['Music', 'CM', 'PV']
-    df_temp = df_temp[(df_temp['type'].notna()) & (~df_temp['type'].isin(exclude_types))]
-    
-    yearly_counts = df_temp.groupby('year_filled')['mal_id'] \
-                      .count() \
-                      .reindex(range(start_year, end_year+1), fill_value=0) \
-                      .reset_index()
+    # conteggio
+    yearly_counts = df.groupby('year_filled')['mal_id'].count().reindex(range(start_year, end_year+1), fill_value=0).reset_index()
     yearly_counts.columns = ['year', 'count']
-    
+    # creazione grafico
     plt.figure(figsize=(15, 6))
     sns.set_style("whitegrid") 
     plt.fill_between(yearly_counts['year'], yearly_counts['count'], color="Purple", alpha=0.3)
@@ -121,25 +92,26 @@ def plot_yearly_production(df, start_year=1915, end_year=2025):
     plt.xticks(ticks=range(start_year, end_year + 1, 5))
     plt.grid(visible=True, which='major', axis='both', linestyle=':', alpha=0.5) 
     plt.ylim(0, yearly_counts['count'].max() * 1.05)
-
     plt.xlim(start_year, end_year + 2)
+    # individuiamo il picco
+    max_row = yearly_counts.loc[yearly_counts['count'].idxmax()]
+    plt.scatter(max_row['year'], max_row['count'], color='Purple', s=50, zorder=5)
+    plt.annotate(f"Peak: {int(max_row['year'])}", xy=(max_row['year'], max_row['count']), 
+                 xytext=(0, 5), textcoords='offset points', ha='center', color='black')
+    
     plt.tight_layout()
     plt.show()
 
-
-#  Analizza il volume di produzione per fonte
+#  Grafico dell'evoluzione della produzione divisa per source
 def plot_production_by_source(df, start_year=1915, end_year=2025):
-    df_temp = df.copy()
-    df_temp['year_filled'] = df_temp['year'].fillna(df_temp['start_date'].dt.year)
-    df_temp = df_temp[(df_temp['source'].notna()) & (df_temp['source'] != 'Unknown')]
-    exclude_types = ['Music', 'CM', 'PV']
-    df_temp = df_temp[(df_temp['type'].notna()) & (~df_temp['type'].isin(exclude_types))]
-
-    top_sources = df_temp['source'].value_counts().nlargest(5).index.tolist()
-    df_temp = df_temp[(df_temp['year_filled'] >= start_year) & (df_temp['year_filled'] <= end_year) & (df_temp['source'].isin(top_sources))]
-    
-    source_time = df_temp.groupby(['year_filled', 'source']).size().unstack(fill_value=0)
+    # escludi unknown
+    df = df[(df['source'].notna()) & (df['source'] != 'Unknown')]
+    # conteggio
+    top_sources = df['source'].value_counts().nlargest(5).index.tolist()
+    df = df[(df['year_filled'] >= start_year) & (df['year_filled'] <= end_year) & (df['source'].isin(top_sources))]
+    source_time = df.groupby(['year_filled', 'source']).size().unstack(fill_value=0)
     source_time = source_time.reindex(columns=top_sources)
+    # creazione grafico
     plt.figure(figsize=(15,6))
     sns.set_style("whitegrid")
     source_time.plot(kind='line', ax=plt.gca(), linewidth=2.5)
@@ -149,195 +121,135 @@ def plot_production_by_source(df, start_year=1915, end_year=2025):
     plt.ylabel('Number of Titles', fontsize=12, fontweight='bold')
     plt.xticks(ticks=range(start_year, end_year + 1, 5))
     plt.legend(title='Source', loc='upper left', frameon=True)
-
     plt.xlim(start_year, end_year + 2)
     plt.tight_layout()
     plt.show()
 
-
-# Analizza la popolarità degli anime nel tempo
-def plot_popularity(df, start_year=1915, end_year=2025):
-    df_temp = df.copy()
-    df_temp['year_filled'] = df_temp['year'].fillna(df_temp['start_date'].dt.year)
-    df_temp = df_temp[(df_temp['year_filled'] >= start_year) & 
-                      (df_temp['year_filled'] <= end_year)]
-
-    exclude_types = ['Music', 'CM', 'PV']
-    df_temp = df_temp[(df_temp['type'].notna()) & 
-                      (~df_temp['type'].isin(exclude_types))]
-
-    summary = df_temp.groupby('year_filled')['members'].mean().reset_index()
-    summary.columns = ['year', 'avg_members']
-    
-    plt.figure(figsize=(15,6))
+# Grafico dell'evoluzione della popolarità media per anno
+def plot_popularity(df, start_year=1960, end_year=2025):
+    # area tot
+    df_all = df[(df['year_filled'] >= 1961) &(df['year_filled'] <= end_year)]
+    summary_all = (df_all.groupby('year_filled')['members'].mean().reset_index().rename(columns={'year_filled': 'year', 'members': 'avg_members'}))
+    # area filtata
+    df_filtered = df_all[df_all['members'] > 5000]
+    summary_filtered = (df_filtered.groupby('year_filled')['members'].mean().reset_index().rename(columns={'year_filled': 'year', 'members': 'avg_members'}))
+    # creazione grafico
+    plt.figure(figsize=(15, 6))
     sns.set_style("whitegrid")
-    sns.lineplot(data=summary, x='year', y='avg_members', color='seagreen', linewidth=2)
-    plt.fill_between(summary['year'], summary['avg_members'], color='seagreen', alpha=0.2)
+     # area filtrata
+    plt.plot(summary_filtered['year'],summary_filtered['avg_members'],color='darkorange',linewidth=2,label='Titles with > 5000 members')
+    plt.fill_between(summary_filtered['year'],summary_filtered['avg_members'],color='darkorange',alpha=1)
+    # area totale
+    plt.plot(summary_all['year'],summary_all['avg_members'],color='seagreen',linewidth=2,label='All titles')
+    plt.fill_between(summary_all['year'],summary_all['avg_members'],color='seagreen',alpha=1)
+    # setting grafico
     plt.ticklabel_format(style='plain', axis='y')
-    max_row = summary.loc[summary['avg_members'].idxmax()]
-    plt.scatter(max_row['year'], max_row['avg_members'], color='darkslategray', s=50, zorder=5)
-    plt.annotate(f"Peak: {int(max_row['year'])}", 
-                 xy=(max_row['year'], max_row['avg_members']), 
-                 xytext=(0, 5), textcoords='offset points', 
-                 ha='center', color='black')
-    plt.xticks(ticks=range(start_year, end_year + 1, 5))
+    plt.xticks(range(start_year, end_year + 1, 5))
     plt.title(f'Popularity Over Time ({start_year} - {end_year})', fontsize=16, pad=20)
     plt.xlabel('Year', fontsize=12, fontweight='bold')
-    plt.ylabel('Popularity', fontsize=12, fontweight='bold')
-    plt.grid(visible=True, which='major', axis='both', linestyle=':', alpha=0.5)
+    plt.ylabel('Popularity (avg members)', fontsize=12, fontweight='bold')
+    plt.grid(True, linestyle=':', alpha=0.5)
     plt.xlim(start_year, end_year + 2)
+    plt.legend()
     plt.tight_layout()
     plt.show()
 
-# Analizza la popolarità degli anime nel tempo filtrata
-def plot_popularity_filtred(df, start_year=1960, end_year=2025):
-    df_temp = df.copy()
-    df_temp['year_filled'] = df_temp['year'].fillna(df_temp['start_date'].dt.year)
-    df_temp = df_temp[(df_temp['year_filled'] >= start_year) & 
-                      (df_temp['year_filled'] <= end_year) & 
-                      (df_temp['members'] > 5000)]
-
-    exclude_types = ['Music', 'CM', 'PV']
-    df_temp = df_temp[(df_temp['type'].notna()) & 
-                      (~df_temp['type'].isin(exclude_types))]
-
-    summary = df_temp.groupby('year_filled')['members'].mean().reset_index()
-    summary.columns = ['year', 'avg_members']
-
-    plt.figure(figsize=(15,6))
+# Grafico dell'evoluzione delle valutazioni medie per anno
+def plot_score(df, start_year=1960, end_year=2025):
+    # area tot
+    df_all = df[(df['year_filled'] >= 1963) &(df['year_filled'] <= end_year) &(df['score'].notna())]
+    summary_all = (df_all.groupby('year_filled')['score'].mean().reset_index().rename(columns={'year_filled': 'year', 'score': 'avg_score'}))
+    # area filtrata
+    df_filtered = df_all[df_all['scored_by'] > 4000]
+    summary_filtered = (df_filtered.groupby('year_filled')['score'].mean().reset_index().rename(columns={'year_filled': 'year', 'score': 'avg_score'}))
+    # creazione grafico
+    plt.figure(figsize=(15, 6))
     sns.set_style("whitegrid")
-    max_row = summary.loc[summary['avg_members'].idxmax()]
-    plt.scatter(max_row['year'], max_row['avg_members'], color='darkslategray', s=50, zorder=5)
-    plt.annotate(f"Peak: {int(max_row['year'])}", 
-                 xy=(max_row['year'], max_row['avg_members']), 
-                 xytext=(0, 5), textcoords='offset points', 
-                 ha='center', color='black')
-    sns.lineplot(data=summary, x='year', y='avg_members', color='seagreen', linewidth=2)
-    plt.fill_between(summary['year'], summary['avg_members'], color='seagreen', alpha=0.2)
-    plt.ticklabel_format(style='plain', axis='y')
-    plt.xticks(ticks=range(start_year, end_year + 1, 5))
-    plt.title(f'Popularity Over Time ({start_year} - {end_year})', fontsize=16, pad=20)
-    plt.xlabel('Year', fontsize=12, fontweight='bold')
-    plt.ylabel('Popularity', fontsize=12, fontweight='bold')
-    plt.grid(visible=True, which='major', axis='both', linestyle=':', alpha=0.5)
-    plt.xlim(start_year, end_year + 2)
-    plt.tight_layout()
-    plt.show()
-
-
-# Analizza la valutazione media nel tempo
-def plot_score(df, start_year=1915, end_year=2025):
-    df_temp = df.copy()
-    df_temp['year_filled'] = df_temp['year'].fillna(df_temp['start_date'].dt.year)
-    df_temp = df_temp[(df_temp['year_filled'] >= start_year) & (df_temp['year_filled'] <= end_year) & (df_temp['score'].notna())]
-    exclude_types = ['Music', 'CM', 'PV']
-    df_temp = df_temp[(df_temp['type'].notna()) &
-                    (~df_temp['type'].isin(exclude_types))]
-
-    summary = df_temp.groupby('year_filled')['score'].mean().reset_index()
-    summary.columns = ['year', 'avg_score']
-
-    plt.figure(figsize=(15,6))
-    sns.set_style("whitegrid")
-    sns.lineplot(data=summary, x='year', y='avg_score', color='mediumpurple', linewidth=2.5)
-    plt.fill_between(summary['year'], summary['avg_score'], color='mediumpurple', alpha=0.2)
-    max_row = summary.loc[summary['avg_score'].idxmax()]
-    plt.scatter(max_row['year'], max_row['avg_score'], color='rebeccapurple', s=50, zorder=5)
-    
-    plt.annotate(f"Peak: {max_row['avg_score']:.2f} ({int(max_row['year'])})", 
-                 xy=(max_row['year'], max_row['avg_score']),
-                 xytext=(0, 10), textcoords='offset points',
-                 ha='center', color='black')
-
-    plt.xticks(ticks=range(start_year, end_year + 1, 5))
+    # area filtrata
+    plt.plot(summary_filtered['year'],summary_filtered['avg_score'],color='mediumpurple',linewidth=2.5,label='Titles with > 4000 votes')
+    plt.fill_between(summary_filtered['year'],summary_filtered['avg_score'],color='mediumpurple',alpha=1)
+    # area totale
+    plt.plot(summary_all['year'],summary_all['avg_score'],color='teal',linewidth=2.5,label='All titles')
+    plt.fill_between(summary_all['year'],summary_all['avg_score'],color='teal',alpha=1)
+    # grafico setting
+    plt.xticks(range(start_year, end_year + 1, 5))
     plt.ticklabel_format(style='plain', axis='y')
     plt.title(f'Score Over Time ({start_year} - {end_year})', fontsize=16, pad=20)
     plt.xlabel('Year', fontsize=12, fontweight='bold')
     plt.ylabel('Score', fontsize=12, fontweight='bold')
-    plt.grid(visible=True, which='major', axis='both', linestyle=':', alpha=0.5)
-    plt.ylim(5 - 0.5, 10)
+    plt.ylim(4.5, 10)
     plt.xlim(start_year, end_year + 2)
+    plt.grid(True, linestyle=':', alpha=0.5)
+    plt.legend()
     plt.tight_layout()
     plt.show()
 
-# Analizza la valutazione media nel tempo filtratata
-def plot_score_filtred(df, start_year=1960, end_year=2025):
-    df_temp = df.copy()
-    df_temp['year_filled'] = df_temp['year'].fillna(df_temp['start_date'].dt.year)
-    df_temp = df_temp[(df_temp['year_filled'] >= start_year) & (df_temp['year_filled'] <= end_year) & (df_temp['score'].notna())]
-    exclude_types = ['Music', 'CM', 'PV']
-    df_temp = df_temp[(df_temp['type'].notna()) &
-                    (~df_temp['type'].isin(exclude_types)) &
-                    (df_temp['scored_by'] > 4000)]
-
-    summary = df_temp.groupby('year_filled')['score'].mean().reset_index()
-    summary.columns = ['year', 'avg_score']
-
-    plt.figure(figsize=(15,6))
-    sns.set_style("whitegrid")
-    sns.lineplot(data=summary, x='year', y='avg_score', color='mediumpurple', linewidth=2.5)
-    plt.fill_between(summary['year'], summary['avg_score'], color='mediumpurple', alpha=0.2)
-    max_row = summary.loc[summary['avg_score'].idxmax()]
-    plt.scatter(max_row['year'], max_row['avg_score'], color='rebeccapurple', s=50, zorder=5)
-    
-    plt.annotate(f"Peak: {max_row['avg_score']:.2f} ({int(max_row['year'])})", 
-                 xy=(max_row['year'], max_row['avg_score']),
-                 xytext=(0, 10), textcoords='offset points',
-                 ha='center', color='black')
-
-    plt.xticks(ticks=range(start_year, end_year + 1, 5))
-    plt.ticklabel_format(style='plain', axis='y')
-    plt.ylim(5 - 0.5, 10)
-    plt.title(f'Score Over Time ({start_year} - {end_year})', fontsize=16, pad=20)
-    plt.xlabel('Year', fontsize=12, fontweight='bold')
-    plt.ylabel('Score', fontsize=12, fontweight='bold')
-    plt.grid(visible=True, which='major', axis='both', linestyle=':', alpha=0.5)
-    
-    plt.xlim(start_year, end_year + 2)
-    plt.tight_layout()
-    plt.show()
-
-# Analizza il numero di episodi medi per anno
+# Grafico dell'evoluzione della media di num episodi per anno
 def plot_episodes(df, start_year=1960, end_year=2025):
-    df_temp = df.copy()
-    df_temp['year_filled'] = df_temp['year'].fillna(df_temp['start_date'].dt.year)
-    df_temp = df_temp[
-        (df_temp['type'].notna()) & 
-        (df_temp['type'].isin(['TV', 'ONA'])) &
-        (df_temp['episodes'].notna()) &
-        (df_temp['status'] == 'Finished Airing')
-    ]
-
-    summary = df_temp.groupby('year_filled')['episodes'].agg(['mean', 'count']).reset_index()
+    # medie e conteggio episodi per anno
+    summary = df.groupby('year_filled')['episodes'].agg(['mean', 'count']).reset_index()
     summary.columns = ['year', 'avg_episodes', 'title_count']
     summary = summary.set_index('year').reindex(range(start_year, end_year + 1), fill_value=0).reset_index()
 
+    # creazione grafico
     plt.figure(figsize=(15, 6))
     sns.set_style("whitegrid")
     sns.barplot(data=summary, x='year', y='avg_episodes', color='cornflowerblue', alpha=0.7)
-
+    # segnamo dove ci sono poche serie anime
     for i, row in summary.iterrows():
         if row['title_count'] > 0 and row['title_count'] <= 10:
             plt.text(i, row['avg_episodes'], f"({int(row['title_count'])})", 
                      ha='center', va='bottom', fontsize=12, color='black', fontweight='bold')
-    
     years = summary['year'].unique()
-    plt.xticks(ticks=[i for i, year in enumerate(years) if year % 5 == 0], 
-               labels=[int(year) for year in years if year % 5 == 0])
-    
+    plt.xticks(ticks=[i for i, year in enumerate(years) if year % 5 == 0], labels=[int(year) for year in years if year % 5 == 0])
     plt.title(f'Number of Episodes Over Time ({start_year} - {end_year})', fontsize=16, pad=20)
     plt.xlabel('Year', fontsize=12, fontweight='bold')
     plt.ylabel('Number of Episodes', fontsize=12, fontweight='bold')
     plt.grid(visible=True, which='major', axis='both', linestyle=':', alpha=0.5)
+
     plt.tight_layout()
     plt.show()
 
-# --- Analisi Generi/Demografiche --- ---
+# Grafico dell'evoluzione del numero di anime doppiati per anno e per lingua
+def plot_language_trend(person_voice_works_df, details_df, default_lang='Italian'):
+    # effettuiamo i merge tra dataset
+    df_temp = person_voice_works_df.merge(details_df[['mal_id', 'year', 'start_date']], left_on='anime_mal_id', right_on='mal_id', how='left')
+    df_temp['year_filled'] = df_temp['year'].fillna(df_temp['start_date'].dt.year)
+    df_temp = df_temp[df_temp['year_filled'] <= 2025]
+    df_temp = df_temp[df_temp['language'].str.lower() != 'japanese']
+    # raggruppiamo per anno e lingua
+    time_lang = df_temp.groupby(['year_filled', 'language']).size().reset_index(name='count')
+    languages = sorted(time_lang['language'].unique())
+    colors = ["#FA2626", "#FFB03A", "#00CC96", "#AB63FA", "#5039FF", "#19D3F3", "#FF6792", "#C1FF7E", "#25AB54", "#FF6BE1"]
+    # creazione grafico interattivo
+    fig = go.Figure()
+    for i, lang in enumerate(languages):
+        color = colors[i % len(colors)]
+        df_lang = time_lang[time_lang['language'] == lang]
+        fig.add_trace(go.Scatter(x=df_lang['year_filled'],y=df_lang['count'],mode='lines+markers',name=lang,
+            visible=(lang.lower() == default_lang.lower()), line=dict(color=color) ))
+    buttons = []
+    for i, lang in enumerate(languages):
+        visible = [False] * len(languages)
+        visible[i] = True
+        buttons.append(dict(label=lang,method="update",args=[{"visible": visible}, {"title": f"Trend of {lang} Dubbing Over Time"}]))
+    active_idx = languages.index(default_lang) if default_lang in languages else 0
+    fig.update_layout(updatemenus=[dict(active=active_idx,buttons=buttons,x=1.15,y=1.2)],
+        title=f"Trend of: {default_lang} Dubbing Over Time",xaxis_title="Year",yaxis_title="Number of Dubbings",width=900,
+        height=500, plot_bgcolor="#f2f2f2", yaxis=dict(range=[0, time_lang['count'].max() + 1000]) )
+    fig.show()
 
+
+# --- Analisi Generi/Demografiche --- 
+
+# Grafico della distribuzione dei generi anime
 def plot_genres(df):
-    df_temp = df['genres'].apply(eval).explode()
+    df_temp = df.copy()
+    # conteggio generi totali
+    df_temp = df_temp['genres'].apply(eval).explode()
     genre_counts = df_temp.value_counts().reset_index()
     genre_counts.columns = ['genre', 'count']
+    # creazione grafico
     plt.figure(figsize=(15,8))
     ax = sns.barplot(data=genre_counts, x='count', y='genre', hue='genre', palette='viridis')
     for container in ax.containers:
@@ -348,39 +260,66 @@ def plot_genres(df):
     plt.tight_layout()
     plt.show()
 
-
+# Grafico dell'evoluzione dei generi nel tempo, interattivo con go
 def plot_genre_trend(df, default_genre='Action'):
     df_temp = df.copy()
     df_temp['year_filled'] = df_temp['year'].fillna(df_temp['start_date'].dt.year)
     df_temp = df_temp[df_temp['year_filled'] <= 2025]
+    # conteggio per anno
     df_temp = df_temp.assign(genres_list=df_temp['genres'].apply(eval)).explode('genres_list')
-
     time_genre = df_temp.groupby(['year_filled', 'genres_list']).size().reset_index(name='count')
     genres = sorted(time_genre['genres_list'].unique())
-
+    # creazione grafico
     fig = go.Figure()
     for genre in genres:
         df_genre = time_genre[time_genre['genres_list'] == genre]
         fig.add_trace(go.Scatter(x=df_genre['year_filled'],y=df_genre['count'], mode='lines+markers', name=genre, 
                                  visible=(genre == default_genre), line=dict(color= "#19D3F3")))
-    
     buttons = []
-
     for i, genre in enumerate(genres):
         visible = [False] * len(genres)
         visible[i] = True
         buttons.append(dict(label=genre, method="update", args=[{"visible": visible}, {"title": f"Trend of {genre} Anime Over Time"}]))
-   
     fig.update_layout(updatemenus=[dict(active=genres.index(default_genre) if default_genre in genres else 0, buttons=buttons, x=1.15, y=1.2)],
         title=f"Trend of {default_genre} Anime Over Time", xaxis_title="Year",yaxis_title="Number of Anime",width=900,height=500, 
         plot_bgcolor="#f2f2f2", yaxis=dict(range=[0, 400]))
     fig.show()
 
+# Grafico della distribuzione generi per studio di produzione
+def plot_genres_studios(df):
+    # top 10 generi
+    df_temp_genres = df.copy()
+    df_temp_genres['genres'] = df_temp_genres['genres'].apply(eval)
+    top_10_genres_list = df_temp_genres['genres'].explode().value_counts().nlargest(10).index.tolist()
+    # top 10 Studios 
+    df_temp_studios = df.copy()
+    df_temp_studios['studios'] = df_temp_studios['studios'].apply(eval)
+    top_10_studios_list = df_temp_studios['studios'].explode().value_counts().nlargest(10).index.tolist()
+    # esplodiamo entrambi per creare la matrice di incrocio
+    df_heatmap = df[['mal_id', 'genres', 'studios']].copy()
+    df_heatmap['genres'] = df_heatmap['genres'].apply(eval)
+    df_heatmap['studios'] = df_heatmap['studios'].apply(eval)
+    df_exploded = df_heatmap.explode('genres').explode('studios')
+    df_final = df_exploded[df_exploded['genres'].isin(top_10_genres_list) & df_exploded['studios'].isin(top_10_studios_list)]
+    # grafico heatmap
+    heatmap_data = df_final.pivot_table(index='studios', columns='genres', values='mal_id', aggfunc='nunique', fill_value=0)
+    heatmap_data = heatmap_data.reindex(index=top_10_studios_list, columns=top_10_genres_list)
+    plt.figure(figsize=(12, 8))
+    sns.heatmap(heatmap_data, annot=True, fmt="d", cmap='YlGnBu', linewidths=.5)
+    plt.title('Anime Distribution: Top 10 Studios vs. Top 10 Genres', fontsize=14, pad=20)
+    plt.xlabel('Genre', fontsize=11)
+    plt.ylabel('Studios', fontsize=11)
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
 
-#
+# Grafico della distribuzione delle demografiche
 def plot_demographics(df):
-    df_temp = df['demographics'].apply(eval).explode()
+    df_temp = df.copy()
+    df_temp = df_temp['demographics'].apply(eval).explode()
+    # conteggio
     demographic_counts = df_temp.value_counts()
+    # creazione grafico
     colors = plt.cm.Pastel1(range(len(demographic_counts)))
     fig, ax = plt.subplots(figsize=(15, 8)) 
     wedges, texts, autotexts = ax.pie(
@@ -399,20 +338,20 @@ def plot_demographics(df):
     plt.tight_layout()
     plt.show()
 
+# Grafico dell'evoluzione della produzione per demografica nel tempo
 def plot_demographics_over_years(df, start_year=1915, end_year=2025):
     df_temp = df.copy()
     df_temp['year_filled'] = df_temp['year'].fillna(df_temp['start_date'].dt.year)
     df_temp = df_temp[df_temp['year_filled'] <= 2025]
     df_temp = df_temp.assign(demographic_list=df_temp['demographics'].apply(eval)).explode('demographic_list')
+    # conteggio per anno
     counts = df_temp.groupby(['year_filled', 'demographic_list']).size().unstack(fill_value=0).sort_index()
-
     #per tenere gli stessi colori del pie chart
     freq_order = df_temp['demographic_list'].value_counts().index
     counts = counts[freq_order]
-
     n_colors = len(counts.columns)
     palette = plt.cm.Pastel1(range(n_colors))
-
+    # creazione grafico
     sns.set_style("whitegrid")
     plt.figure(figsize=(15,6))
     counts.plot(kind='line', ax=plt.gca(), linewidth=2.5, color=palette)
@@ -426,8 +365,7 @@ def plot_demographics_over_years(df, start_year=1915, end_year=2025):
     plt.tight_layout()
     plt.show()
 
-
-#
+# Grafico dei 3 generi più prodotti per target maschile
 def plot_male_demographics(df):
     df_temp = df[['genres', 'demographics']].copy()
     df_temp['demographics'] = df_temp['demographics'].apply(eval)
@@ -436,8 +374,10 @@ def plot_male_demographics(df):
     df_temp = df_temp.explode('genres')
     target_order = ['Shounen', 'Seinen']
     df_temp = df_temp[df_temp['demographics'].isin(target_order)]
+    # conteggio
     data = df_temp.groupby(['demographics', 'genres']).size().reset_index(name='count')
     data = data.sort_values(['demographics', 'count'], ascending=[True, False]).groupby('demographics').head(3)
+    # creazione grafico
     g = sns.catplot(data=data, kind="bar", y="genres", x="count", col="demographics", col_order=target_order, hue="genres", 
         palette="tab10", sharey=False, sharex=False, height=5, aspect=1.4, dodge=False, edgecolor='white', linewidth=1.5)
     g.set_axis_labels("", "")
@@ -447,7 +387,7 @@ def plot_male_demographics(df):
     g.fig.suptitle('Dominant Genres in Male Demographics', fontsize=18, y=1.1)
     plt.show()
 
-#
+# Grafico dei 3 generi più prodotti per target femminile
 def plot_female_demographics(df):
     df_temp = df[['genres', 'demographics']].copy()
     df_temp['demographics'] = df_temp['demographics'].apply(eval)
@@ -456,8 +396,10 @@ def plot_female_demographics(df):
     df_temp = df_temp.explode('genres')
     target_order = ['Shoujo', 'Josei']
     df_temp = df_temp[df_temp['demographics'].isin(target_order)]
+    # conteggio
     data = df_temp.groupby(['demographics', 'genres']).size().reset_index(name='count')
     data = data.sort_values(['demographics', 'count'], ascending=[True, False]).groupby('demographics').head(3)
+    # creazione grafico
     g = sns.catplot(data=data, kind="bar", y="genres", x="count", col="demographics", col_order=target_order, hue="genres", 
         palette="spring", sharey=False, sharex=False, height=5, aspect=1.4, dodge=False, edgecolor='white', linewidth=1.5)
     g.set_axis_labels("", "")
@@ -467,19 +409,19 @@ def plot_female_demographics(df):
     g.fig.suptitle('Dominant Genres in Female Demographics', fontsize=18, y=1.1)
     plt.show()
 
-#
+# Grafico dei 3 generi più prodotti per target bambini
 def plot_kids_demographics(df):
     df_temp = df[['genres', 'demographics']].copy()
     df_temp['demographics'] = df_temp['demographics'].apply(eval)
     df_temp = df_temp.explode('demographics')
-
     df_temp['genres'] = df_temp['genres'].apply(eval)
     df_temp = df_temp.explode('genres')
-
     target = ['Kids']
     df_temp = df_temp[df_temp['demographics'].isin(target)]
+    # conteggio
     data = df_temp.groupby(['demographics', 'genres']).size().reset_index(name='count')
     data = data.sort_values(['demographics', 'count'], ascending=[True, False]).groupby('demographics').head(3)
+    # creazione grafico
     g = sns.catplot(data=data, kind="bar", y="genres", x="count", col="demographics", hue="genres", 
         palette="cool", sharey=False, sharex=False, height=7, aspect=2.14, dodge=False, edgecolor='white', linewidth=1.5)
     g.set_axis_labels("", "")
@@ -489,15 +431,17 @@ def plot_kids_demographics(df):
     g.fig.suptitle('Dominant Genres in Kids Demographics', fontsize=18, y=1.1)
     plt.show()
 
-#
+# Grafico della valutazione media per genre
 def plot_genres_score(df):
     df_temp = df[['genres', 'score']].copy()
     df_temp['genres'] = df_temp['genres'].apply(eval)
     df_temp = df_temp.explode('genres')
+    # media dei voti
     data = df_temp.groupby('genres')['score'].mean().reset_index()
     data = data.sort_values('score', ascending=False)
+    # creazione grafico
     plt.figure(figsize=(15, 7)) 
-    sns.barplot(data=data, x='genres', y='score', hue='genres', palette='crest', edgecolor='white', linewidth=0.8)
+    sns.barplot(data=data, x='genres', y='score', hue='genres', palette='tab10', edgecolor='white', linewidth=0.8)
     plt.title('Average Score by Genre', fontsize=22, pad=30)
     plt.xlabel("")
     plt.ylabel("Average Score", fontsize=14, fontweight='bold')
@@ -508,12 +452,57 @@ def plot_genres_score(df):
     plt.tight_layout()
     plt.show()
 
+# Grafico del cast medio per genere e demografiche
+def plot_cast_genres_dem(df, df2):
+    char_counts = df.groupby('anime_mal_id').size().reset_index(name='char_count')
+    char_counts.rename(columns={'anime_mal_id': 'mal_id'}, inplace=True)
+    # merge
+    df_genre_chars = pd.merge(char_counts, df2[['mal_id', 'genres']], on='mal_id')
+    df_dem_chars = pd.merge(char_counts, df2[['mal_id', 'demographics']], on='mal_id')
+    # trovo top 10 generi
+    df_genre_chars['genres'] = df_genre_chars['genres'].apply(eval)
+    df_exploded = df_genre_chars.explode('genres')
+    top_genres = df_exploded['genres'].value_counts().nlargest(10).index
+    df_plot = df_exploded[df_exploded['genres'].isin(top_genres)]
+    # trovo demografiche
+    df_dem_chars['demographics'] = df_dem_chars['demographics'].apply(eval)
+    df_exploded_dem = df_dem_chars.explode('demographics').reset_index(drop=True)
+    # creazione grafico per genere
+    plt.figure(figsize=(15, 8))
+    sns.boxplot(data=df_plot, x='char_count', y='genres', hue='genres',palette='tab10', orient='h', showfliers=False) 
+    plt.title('Character Density Distribution by Genre', fontsize=14, pad=20)
+    plt.xlabel('Number of Characters per Anime', fontsize=12)
+    plt.ylabel('Genre', fontsize=12)
+    plt.grid(axis='x', linestyle='--', alpha=0.4)
+    plt.tight_layout()
+    plt.show()
+    # creazione grafico per demografica
+    palette = {
+        'Shounen': '#8ecae6',  # Blu chiaro/pastello
+        'Seinen': '#b7e4c7',   # Verde pastello
+        'Shoujo': '#ffb3c1',   # Rosa
+        'Josei': '#c8b6ff',    # Viola/Lilla
+        'Kids': '#ffd166'      # Giallo/Arancio per completare
+    }
+    plt.figure(figsize=(15, 8))
+    sns.boxplot(data=df_exploded_dem, x='char_count', y='demographics', hue='demographics', palette=palette, orient='h', 
+                showfliers=False, linecolor='black', legend=False)
+    plt.title('Character Density Distribution by Demographic', fontsize=14, pad=20)
+    plt.xlabel('Number of Characters per Anime', fontsize=12)
+    plt.ylabel('Demographic', fontsize=12)
+    plt.grid(axis='x', linestyle='--', alpha=0.4)
+    plt.tight_layout()
+    plt.show()
+    
+# --- Indagine sugli Utenti ---
 
-# --- ANALISI 3 ---
-
+# Grafico della distribuzione utenti per genere dichiarato
 def plot_profile_gender(df):
-    df_temp = df['gender'].value_counts()
+    df_temp = df.copy()
+    # conteggio
+    df_temp = df_temp['gender'].value_counts()
     colors = plt.cm.Set2(range(len(df_temp)))
+    # creazione grafico
     fig, ax = plt.subplots(figsize=(15, 8)) 
     wedges, texts, autotexts = plt.pie(df_temp,labels=df_temp.index,autopct='%1.1f%%',startangle=140, 
                                     wedgeprops={'edgecolor': 'white', 'linewidth': 1.5}, pctdistance=0.85, colors=colors)
@@ -525,7 +514,9 @@ def plot_profile_gender(df):
     plt.tight_layout()
     plt.show()
 
+# Grafici dei generi più visti dagli utenti divisi per genere dichiarato
 def plot_genre_by_gender(ratings_df, profiles_df, details_df):
+    # merge sui dati
     df_temp = ratings_df[ratings_df['status'].isin(['completed', 'watching'])][['username', 'anime_id']]
     df_temp = pd.merge(df_temp, profiles_df[['username', 'gender']], on='username')
     df_temp = df_temp.groupby(['gender', 'anime_id']).size().reset_index(name='view_count')
@@ -533,12 +524,11 @@ def plot_genre_by_gender(ratings_df, profiles_df, details_df):
     df_temp['genres'] = df_temp['genres'].apply(eval)
     df_temp = df_temp.explode('genres')
     top_genres_gender = df_temp.groupby(['gender', 'genres'])['view_count'].sum().reset_index(name='total_views')
-
+    # dividiamoli per genere
     df_male = top_genres_gender[top_genres_gender['gender'] == 'Male'].nlargest(10, 'total_views')
     df_female = top_genres_gender[top_genres_gender['gender'] == 'Female'].nlargest(10, 'total_views')
     df_nb = top_genres_gender[top_genres_gender['gender'] == 'Non-Binary'].nlargest(10, 'total_views')
-
-    # female
+    # grafico female
     custom_oranges = sns.light_palette("#fc8d62", n_colors=12, reverse=True)[2:12]
     plt.figure(figsize=(15, 8))
     patches, texts, autotexts = plt.pie(df_female['total_views'], labels=df_female['genres'], autopct='%1.1f%%', startangle=140, 
@@ -550,8 +540,7 @@ def plot_genre_by_gender(ratings_df, profiles_df, details_df):
     plt.axis('equal')  
     plt.tight_layout()
     plt.show()
-
-    #male
+    # grafico male
     plt.figure(figsize=(15, 8))
     custom_greens = sns.light_palette("#66c2a5", n_colors=12, reverse=True)[2:12]
     patches, texts, autotexts = plt.pie(df_male['total_views'], labels=df_male['genres'], autopct='%1.1f%%', startangle=140, 
@@ -563,8 +552,7 @@ def plot_genre_by_gender(ratings_df, profiles_df, details_df):
     plt.axis('equal')  
     plt.tight_layout()
     plt.show()
-
-    #non-binary
+    # grafico non-binary
     plt.figure(figsize=(15, 8))
     custom_purples = sns.light_palette("#8da0cb", n_colors=12, reverse=True)[2:12]
     patches, texts, autotexts = plt.pie(df_nb['total_views'], labels=df_nb['genres'], autopct='%1.1f%%', startangle=140, 
@@ -577,12 +565,14 @@ def plot_genre_by_gender(ratings_df, profiles_df, details_df):
     plt.tight_layout()
     plt.show()
 
-
+# Grafico dell'età media degli utenti
 def plot_profile_age(df):
+    # conteggio età media
     today = pd.Timestamp('today')
     df_temp = df[(df['birthday'].dt.year >= 1900) & (df['birthday'] <= today)]
     ages = (today - df_temp['birthday']).dt.days // 365 
     mean_age = ages.mean()
+    # creazione grafico
     plt.figure(figsize=(12,6))
     plt.hist(ages.dropna(), bins=range(0, 91, 5), color='navy', edgecolor='white')
     plt.axvline(mean_age, color='red', linestyle='--', linewidth=2, label=f'Mean Age: {mean_age:.1f}')
@@ -596,50 +586,24 @@ def plot_profile_age(df):
     plt.tight_layout()
     plt.show()
 
-
-def plot_profile_locations(df):
-    filepath = "./ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp"
-    df_temp = df["location"].value_counts().reset_index()
-    df_temp.columns = ['location', 'count']
-    world = gpd.read_file(filepath)
-
-    name_corrections = {
-        'United States': 'United States of America',
-        'South Korea': 'Korea, Republic of',
-        'Vietnam': 'Viet Nam'
-    }
-    df_temp['location'] = df_temp['location'].replace(name_corrections)
-    world_users = world.merge(df_temp, left_on='NAME', right_on='location', how='left')
-    world_users['count'] = world_users['count'].fillna(0)
-
-    world_zero = world_users[world_users['count'] == 0]
-    world_nonzero = world_users[world_users['count'] > 0]
-    
-    fig, ax = plt.subplots(1, 1, figsize=(15, 10))
-    world_zero.plot(ax=ax, color='lightgrey', edgecolor='black', linewidth=0.5)
-    world_nonzero.plot(column='count', ax=ax, legend=True,cmap='OrRd', edgecolor='black', linewidth=0.5,
-                     legend_kwds={'label': "Number of Users", 'orientation': "horizontal"})
-    
-    ax.grid(False)
-    ax.set_title('User Locations Worldwide', fontsize=16)
-    plt.show()
-
+# Grafico sul target demografico più visto dalle diverse fasce d'età
 def plot_demographic_by_age(profiles_df, details_df, ratings_df):
+    # calcolo età
     profiles_temp = profiles_df.copy()
     profiles_temp['birthday'] = pd.to_datetime(profiles_temp['birthday'], errors='coerce')
     profiles_temp['age'] = 2026 - profiles_temp['birthday'].dt.year
     bins = [10, 20, 30, 50, 80]
     labels = ['Teenagers', 'Young Adults', 'Adults', 'Seniors']
     profiles_temp['age_group'] = pd.cut(profiles_temp['age'], bins=bins, labels=labels)
-
+    # trovo le demografiche
     details_temp = details_df[['mal_id', 'demographics']].copy()
     details_temp['demographics'] = details_temp['demographics'].apply(eval)
     details_temp = details_temp.explode('demographics')
-
+    # merge tra i dati
     df_temp = ratings_df[ratings_df['status'].isin(['completed', 'watching'])][['username', 'anime_id']]
     df_temp = pd.merge(df_temp, profiles_temp[['username', 'age_group']], on='username')
     df_plot = pd.merge(df_temp, details_temp, left_on='anime_id', right_on='mal_id')
-
+    # assegnazione colori
     color_map = {
         'Shounen': "#66A5D8",  
         'Seinen': "#7AB66D",  
@@ -647,11 +611,12 @@ def plot_demographic_by_age(profiles_df, details_df, ratings_df):
         'Josei': "#E9A2FF",   
         'Kids': "#FFB488"  
     }
-
+    # in percentuale
     ct = df_plot.groupby(['age_group', 'demographics'], observed=True).size().unstack(fill_value=0)
     ct_norm = ct.div(ct.sum(axis=1), axis=0) * 100
     category_order = ct_norm.sum().sort_values(ascending=True).index
     ct_norm = ct_norm[category_order]
+    # creazione grafico
     ax = ct_norm.plot(kind='bar', stacked=True, figsize=(15, 7), color=color_map, edgecolor='white')
     plt.title('Most Viewed Demographic Targets by Age Group', fontsize=15)
     plt.xlabel('')
@@ -665,13 +630,44 @@ def plot_demographic_by_age(profiles_df, details_df, ratings_df):
     plt.tight_layout()
     plt.show()
 
+# Grafico sulla provenienza degli utenti
+def plot_profile_location(df):
+    # carica cartina mondiale e conteggio
+    filepath = "./ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp"
+    df_temp = df["location"].value_counts().reset_index()
+    df_temp.columns = ['location', 'count']
+    world = gpd.read_file(filepath)
+    # match dei nomi
+    name_corrections = {
+        'United States': 'United States of America',
+        'South Korea': 'Korea, Republic of',
+        'Vietnam': 'Viet Nam'
+    }
+    df_temp['location'] = df_temp['location'].replace(name_corrections)
+    world_users = world.merge(df_temp, left_on='NAME', right_on='location', how='left')
+    world_users['count'] = world_users['count'].fillna(0)
+    # dividiamo in paesi senza utenti e con 
+    world_zero = world_users[world_users['count'] == 0]
+    world_nonzero = world_users[world_users['count'] > 0]
+    # creazione grafico: per i paesi senza utenti apparirà grigio
+    fig, ax = plt.subplots(1, 1, figsize=(15, 10))
+    world_zero.plot(ax=ax, color='lightgrey', edgecolor='black', linewidth=0.5)
+    world_nonzero.plot(column='count', ax=ax, legend=True,cmap='OrRd', edgecolor='black', linewidth=0.5,
+                     legend_kwds={'label': "Number of Users", 'orientation': "horizontal"})
+    ax.grid(False)
+    ax.set_title('User Locations Worldwide', fontsize=16)
+    plt.show()
+
+# Grafico sulla media dei voti per paese
 def plot_score_location(profiles_df, ratings_df, details_df):
+    # per ottimizzare la ricerca in ratings 
     user_to_loc = profiles_df.set_index('username')['location'].to_dict()
     ratings_fast = ratings_df[['username', 'anime_id']].copy()
     ratings_fast['location'] = ratings_fast['username'].map(user_to_loc)
     ratings_fast.dropna(subset=['location'], inplace=True)
     geo_data = ratings_fast.merge(details_df[['mal_id', 'score']], left_on='anime_id', right_on='mal_id').groupby('location').agg(
         mean_rating=('score', 'mean'),vote_count=('score', 'count')).reset_index()
+    # caricamento mappa del mondo + correzioni
     filepath = "./ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp"
     world = gpd.read_file(filepath)
     name_corrections = {
@@ -682,8 +678,10 @@ def plot_score_location(profiles_df, ratings_df, details_df):
     geo_data['location'] = geo_data['location'].replace(name_corrections)
     world_users = world.merge(geo_data, left_on='NAME', right_on='location', how='left')
     world_users['vote_count'] = world_users['vote_count'].fillna(0)
+    # dividiamo in paesi senza utenti e con
     world_zero = world_users[world_users['vote_count'] == 0]
     world_nonzero = world_users[world_users['vote_count'] > 0]
+    # creazione grafico: per i paesi senza utenti apparirà grigio
     fig, ax = plt.subplots(1, 1, figsize=(15, 10))
     world_zero.plot(ax=ax, color='lightgrey', edgecolor='black', linewidth=0.5)
     world_nonzero.plot(column='mean_rating', ax=ax, legend=True,cmap='RdYlGn', edgecolor='black', linewidth=0.5,
@@ -692,37 +690,49 @@ def plot_score_location(profiles_df, ratings_df, details_df):
     ax.set_title('Global Distribution of Average Anime Ratings', fontsize=16)
     plt.show()
 
+# Grafico sulla distribuzione dei generi per direttore/creatore
+def plot_top_genre_creator(top, details_df, directors):
+    df_genres = details_df[['mal_id', 'genres']].copy()
+    df_genres['genres'] = df_genres['genres'].apply(eval)
+    df_genres = df_genres.explode('genres')
+    top_10_names = top['name'].tolist()
+    df_registi_generi = directors[directors['name'].isin(top_10_names)].merge(
+        df_genres, left_on='anime_mal_id', right_on='mal_id', how='inner')
+    # conteggio
+    genre_counts = df_registi_generi.groupby(['name', 'genres']).size().unstack(fill_value=0)
+    genre_percents = genre_counts.div(genre_counts.sum(axis=1), axis=0)
+    # creazione grafico
+    fig, ax = plt.subplots(figsize=(15, 8))
+    genre_percents.plot(kind='bar', stacked=True, ax=ax, colormap='tab20')
+    plt.title('Genre Diversity Among the Top 10 Most Favorited Creators', fontsize=16)
+    plt.xlabel('Creators', fontsize=12)
+    plt.ylabel('Percentage of Production per Genre', fontsize=12)
+    plt.legend(title='Genres', bbox_to_anchor=(1.05, 1), loc='upper left', ncol=2)
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+    plt.show()
 
-# --- ANALISI 4 ---
-
-def plot_language_trend(person_voice_works_df, details_df, default_lang='Italian'):
-    df_temp = person_voice_works_df.merge(
-        details_df[['mal_id', 'year', 'start_date']], 
-        left_on='anime_mal_id', 
-        right_on='mal_id', 
-        how='left'
-    )
-    df_temp['year_filled'] = df_temp['year'].fillna(df_temp['start_date'].dt.year)
-    df_temp = df_temp[df_temp['year_filled'] <= 2025]
-    df_temp = df_temp[df_temp['language'].str.lower() != 'japanese']
-    
-    time_lang = df_temp.groupby(['year_filled', 'language']).size().reset_index(name='count')
-    languages = sorted(time_lang['language'].unique())
-    colors = ["#FA2626", "#FFB03A", "#00CC96", "#AB63FA", "#5039FF", "#19D3F3", "#FF6792", "#C1FF7E", "#25AB54", "#FF6BE1"]
-    fig = go.Figure()
-    for i, lang in enumerate(languages):
-        color = colors[i % len(colors)]
-        df_lang = time_lang[time_lang['language'] == lang]
-        fig.add_trace(go.Scatter(x=df_lang['year_filled'],y=df_lang['count'],mode='lines+markers',name=lang,
-            visible=(lang.lower() == default_lang.lower()), line=dict(color=color) ))
-    buttons = []
-    for i, lang in enumerate(languages):
-        visible = [False] * len(languages)
-        visible[i] = True
-        buttons.append(dict(label=lang,method="update",args=[{"visible": visible}, {"title": f"Trend of {lang} Dubbing Over Time"}]))
-   
-    active_idx = languages.index(default_lang) if default_lang in languages else 0
-    fig.update_layout(updatemenus=[dict(active=active_idx,buttons=buttons,x=1.15,y=1.2)],
-        title=f"Trend of: {default_lang} Dubbing Over Time",xaxis_title="Year",yaxis_title="Number of Dubbings",width=900,
-        height=500, plot_bgcolor="#f2f2f2", yaxis=dict(range=[0, time_lang['count'].max() + 1000]) )
-    fig.show()
+# Grafico sul confronto tra volume raccomandazioni e statistiche di voto
+def plot_rec_score(recommendations_df, stats_df):
+    rec_counts = recommendations_df['mal_id'].value_counts().reset_index()
+    rec_counts.columns = ['mal_id', 'total_recs']
+    # Uniamo con le percentuali di voto di stats_df
+    df_general = pd.merge(rec_counts, stats_df, on='mal_id')
+    # Dividiamo gli anime in base a quante volte sono stati raccomandati 
+    # (ogni gruppo rappresenta il 20% degli anime, dai meno consigliati ai "Top Recommended")
+    df_general['rec_rank'] = df_general['total_recs'].rank(method='first')
+    df_general['rec_group'] = pd.qcut(df_general['rec_rank'], q=5, labels=['Very Low', 'Low', 'Medium', 'High', 'Top'])
+    # per ogni gruppo di popolarità, calcoliamo la media delle percentuali di ogni voto.
+    score_cols = [f'score_{i}_percentage' for i in range(1, 11)]
+    heatmap_data = df_general.groupby('rec_group', observed=False)[score_cols].mean()
+    heatmap_data = heatmap_data.iloc[::-1]
+    # Rinominiamo le colonne per una lettura pulita (1, 2, 3...)
+    heatmap_data.columns = [str(i) for i in range(1, 11)]
+    # creazione grafico
+    plt.figure(figsize=(15, 6))
+    sns.heatmap(heatmap_data, annot=True, fmt=".1f", cmap="Greens", cbar_kws={'label': 'Avg. Vote Distribution (%)'})
+    plt.title('Vote Distribution vs. Recommendation Volume', fontsize=14, pad=20)
+    plt.xlabel('% Vote Score', fontsize=12)
+    plt.ylabel('Recommendation Tier', fontsize=12)
+    plt.tight_layout()
+    plt.show()
