@@ -4,4 +4,4 @@ matplotlib
 seaborn
 geopandas
 plotly
-
+jupyter
