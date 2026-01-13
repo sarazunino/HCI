@@ -8,7 +8,7 @@ L'obiettivo del progetto è analizzare e visualizzare un ampio set di dati relat
 I comandi sotto elencati devono essere digitati nel Terminale del tuo computer, assicurandoti di essere all'interno della  cartella principale del progetto.  
 Per caricare automaticamente le librerie utilizzate possiamo seguire due metodi:  
 ### **Tramite requirements.txt** (due scelte)  
-**A. Installazione diretta**
+**A. Installazione diretta**  
  ```pip install -r requirements.txt```   
 **B. Per mantenere il sistema pulito ed evitare conflitti tra librerie, si può creare un ambiente isolato:**  
 * Crea ambiente: ```python -m venv venv```  
