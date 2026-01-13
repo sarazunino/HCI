@@ -66,11 +66,11 @@ def drop_key_missing(df, key_column, df_name="DataFrame"):
 
 # Converte una colonna in datetime come visto a lezione
 def convert_to_datetime(df, column_name):
+    pd.set_option('future.no_silent_downcasting', True)
     df_temp = pd.to_datetime(df[column_name], errors='coerce', format='%Y')
     df_temp = df_temp.fillna(pd.to_datetime(df[column_name], errors='coerce'))
     df[column_name] = df_temp
     return df
-
 
 # ----------------------- FUNZIONI PER LA PARTE DI ANALISI E VISUALIZZAZIONE -----------------------
 
