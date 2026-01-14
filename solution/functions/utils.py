@@ -2,17 +2,16 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import seaborn as sns
-import numpy as np
 import geopandas as gpd
 
 # ----------------------- FUNZIONI DI PULIZIA  -----------------------
 
-# Mostra i dtypes
+# Mostra i dtypes delle colonne dei dataset
 def show_dtypes(df, name="DataFrame"):
     print(f"\nDATASET: {name}")
     print(df.dtypes)
 
-# Analizza e stampa la presenza di record duplicati
+# Calcola e stampa la presenza di record duplicati
 def check_duplicates(df, name="DataFrame"):
     num_duplicates = df.duplicated().sum()
     if num_duplicates == 0:
@@ -52,7 +51,7 @@ def drop_empty_rows(df, name="DataFrame"):
         print(f"In {name}: removed {removed} empty rows")
     return df_cleaned
 
-# Rimuove le righe che hanno key_column NaN
+# Rimuove le righe che hanno colonne chiavi NaN
 def drop_key_missing(df, key_column, df_name="DataFrame"):
     if key_column in df.columns:
         old_len = len(df)
@@ -76,7 +75,7 @@ def convert_to_datetime(df, column_name):
 
 # --- Evoluzione Temporale dell'Industria ---
 
-# Prende l'anno di start_date quando year è NaN e esclude i tipi non narrativi
+# Prende l'anno di start_date quando year è NaN e esclude i tipi non narrativi, non prende i dati dopo il 2025
 def get_cleaned_details(df):
     df_copy = df.copy()
     df_copy['year_filled'] = df_copy['year'].fillna(df_copy['start_date'].dt.year)
@@ -87,7 +86,7 @@ def get_cleaned_details(df):
 
 # --- Analisi Generi/Demografiche --- 
 
-# Trasforma le colonne 'genres' e 'demographics' da stringhe di liste in righe singole.
+# Trasforma le colonne 'genres' e 'demographics' da liste in righe singole.
 def get_exploded(df):
     df_copy = df.copy()
     df_copy['genres'] = df_copy['genres'].apply(eval)
@@ -100,7 +99,7 @@ def get_exploded(df):
 
 # Grafici dei generi più visti dagli utenti divisi per genere dichiarato
 def plot_genre_by_gender(df_female, df_male, df_nb):
-    # grafico female
+    # grafico a ciambella female
     custom_oranges = sns.light_palette("#fc8d62", n_colors=12, reverse=True)[2:12]
     plt.figure(figsize=(15, 8))
     patches, texts, autotexts = plt.pie(df_female['total_views'], labels=df_female['genres'], autopct='%1.1f%%', startangle=140, 
@@ -112,7 +111,7 @@ def plot_genre_by_gender(df_female, df_male, df_nb):
     plt.axis('equal')  
     plt.tight_layout()
     plt.show()
-    # grafico male
+    # grafico a ciambella male
     plt.figure(figsize=(15, 8))
     custom_greens = sns.light_palette("#66c2a5", n_colors=12, reverse=True)[2:12]
     patches, texts, autotexts = plt.pie(df_male['total_views'], labels=df_male['genres'], autopct='%1.1f%%', startangle=140, 
@@ -124,7 +123,7 @@ def plot_genre_by_gender(df_female, df_male, df_nb):
     plt.axis('equal')  
     plt.tight_layout()
     plt.show()
-    # grafico non-binary
+    # grafico a ciambella non-binary
     plt.figure(figsize=(15, 8))
     custom_purples = sns.light_palette("#8da0cb", n_colors=12, reverse=True)[2:12]
     patches, texts, autotexts = plt.pie(df_nb['total_views'], labels=df_nb['genres'], autopct='%1.1f%%', startangle=140, 
@@ -137,7 +136,7 @@ def plot_genre_by_gender(df_female, df_male, df_nb):
     plt.tight_layout()
     plt.show()
 
-# Settings per geopandas
+# Settings per geopandas, caricamneto mappa e correzione nomi con merge
 def plot_location(df):
     df_copy = df.copy()
     filepath = "./ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp"

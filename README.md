@@ -4,7 +4,7 @@
 ## Descrizione  
 L'obiettivo del progetto è analizzare e visualizzare un ampio set di dati relativi agli anime tramite l'uso di Python, Pandas, Seaborn e librerie varie.  
 
-## 🚀 Come eseguire il progetto  
+## Come eseguire il progetto  
 I comandi sotto elencati devono essere digitati nel Terminale del tuo computer, assicurandoti di essere all'interno della  cartella principale del progetto.  
 Per caricare automaticamente le librerie utilizzate possiamo seguire due metodi:  
 ### **Tramite requirements.txt** (due scelte)  
@@ -21,4 +21,4 @@ Se utilizzi Anaconda o Miniconda, puoi rigenerare l'ambiente esatto tramite il f
 * ```conda env create -f environment.yml```  
 * ```conda activate hci_project```  
 
-Il Jupyter Notebook sarà così pronto per essere eseguito e caricherà automaticamente tutti le librerie e moduli necessari.
+Il Jupyter Notebook sarà così pronto per essere eseguito e caricherà automaticamente tutte le librerie necessarie.
