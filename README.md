@@ -10,6 +10,7 @@ Per caricare automaticamente le librerie utilizzate possiamo seguire due metodi:
 ### **Tramite requirements.txt** (due scelte)  
 **A. Installazione diretta**  
  ```pip install -r requirements.txt```   
+
 **B. Per mantenere il sistema pulito ed evitare conflitti tra librerie, si può creare un ambiente isolato:**  
 * Crea ambiente: ```python -m venv venv```  
 * Attiva: Windows:```venv\Scripts\activate```  Mac/Linux:```source venv/bin/activate```   
