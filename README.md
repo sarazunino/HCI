@@ -1,5 +1,4 @@
 # HUMAN-COMPUTER INTERACTION 2025-2026
-**Autore:** Sara Zunino  
 
 ## Descrizione  
 L'obiettivo del progetto è analizzare e visualizzare un ampio set di dati relativi agli anime tramite l'uso di Python, Pandas, Seaborn e librerie varie.  
